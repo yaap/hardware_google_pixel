@@ -2179,6 +2179,7 @@ void SysfsCollector::logPerHour() {
         return;
     }
     mm_metrics_reporter_.logPixelMmMetricsPerHour(stats_client);
+    mm_metrics_reporter_.logMmProcessUsageByOomGroupSnapshot(stats_client);
     logZramStats(stats_client);
     if (kPowerMitigationStatsPath != nullptr && strlen(kPowerMitigationStatsPath) > 0)
         mitigation_stats_reporter_.logMitigationStatsPerHour(stats_client,
