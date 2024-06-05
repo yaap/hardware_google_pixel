@@ -31,6 +31,7 @@
 #include <sstream>
 
 #include "Stats.h"
+#include "utils.h"
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof((x)) / sizeof((x)[0]))
@@ -277,6 +278,21 @@ Vibrator::Vibrator(std::unique_ptr<HwApi> hwapi, std::unique_ptr<HwCal> hwcal,
 
     mHwApi->getEffectCount(&effectCount);
     mEffectDurations.resize(effectCount);
+
+    mIsPrimitiveDelayEnabled =
+            utils::getProperty("ro.vendor.vibrator.hal.cs40L25.primitive_delays.enabled", false);
+
+    mDelayEffectDurations.resize(effectCount);
+    if (mIsPrimitiveDelayEnabled) {
+        mDelayEffectDurations = {
+                25, 45, 45, 20, 20, 20, 20, 20,
+        }; /* delays for each effect based on measurements */
+    } else {
+        mDelayEffectDurations = {
+                0, 0, 0, 0, 0, 0, 0, 0,
+        }; /* no delay if property not set */
+    }
+
     for (size_t effectIndex = 0; effectIndex < effectCount; effectIndex++) {
         mHwApi->setEffectIndex(effectIndex);
         uint32_t effectDuration;
@@ -527,6 +543,8 @@ ndk::ScopedAStatus Vibrator::compose(const std::vector<CompositeEffect> &composi
 
             effectBuilder << effectIndex << "." << intensityToVolLevel(e.scale, effectIndex) << ",";
             mTotalDuration += mEffectDurations[effectIndex];
+
+            mTotalDuration += mDelayEffectDurations[effectIndex];
         }
     }
 
