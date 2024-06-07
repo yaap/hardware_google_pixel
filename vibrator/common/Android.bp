@@ -33,6 +33,7 @@ soong_config_string_variable {
     values: [
         "luxshare_ict_081545",
         "luxshare_ict_lt_xlra1906d",
+        "legacy_zlra_actuator",
     ],
 }
 
@@ -55,6 +56,11 @@ haptics_feature_cc_defaults {
             luxshare_ict_lt_xlra1906d: {
                 cflags: [
                     "-DLUXSHARE_ICT_LT_XLRA1906D",
+                ],
+            },
+            legacy_zlra_actuator: {
+                cflags: [
+                    "-DLEGACY_ZLRA_ACTUATOR",
                 ],
             },
             conditions_default: {

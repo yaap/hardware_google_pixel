@@ -75,7 +75,14 @@ static constexpr std::array<EffectLevel, 2> V_TICK_DEFAULT = {1, 100};
 static constexpr std::array<EffectLevel, 2> V_CLICK_DEFAULT{1, 100};
 static constexpr std::array<EffectLevel, 2> V_LONG_DEFAULT{1, 100};
 static constexpr std::array<EffectDuration, 14> EFFECT_DURATIONS{
-        0, 100, 12, 1000, 300, 133, 150, 500, 100, 5, 12, 1000, 1000, 1000};
+#if defined(UNSPECIFIED_ACTUATOR)
+        /* For Z-LRA actuators */
+        1000, 100, 25, 1000, 300, 133, 150, 500, 100, 6, 12, 1000, 13, 5};
+#elif defined(LEGACY_ZLRA_ACTUATOR)
+        1000, 100, 25, 1000, 150, 100, 150, 500, 100, 6, 25, 1000, 13, 5};
+#else
+        1000, 100, 12, 1000, 300, 133, 150, 500, 100, 5, 12, 1000, 13, 5};
+#endif
 
 // Constants With Prescribed Values
 
