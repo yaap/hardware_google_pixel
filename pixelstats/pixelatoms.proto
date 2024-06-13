@@ -129,6 +129,7 @@ message Atom {
       BatteryTimeToFullStatsReported battery_time_to_full_stats_reported = 105074;
       VendorAudioDirectUsbAccessUsageStats vendor_audio_direct_usb_access_usage_stats = 105075 [(android.os.statsd.module) = "pixelaudio"];
       VendorAudioUsbConfigStats vendor_audio_usb_config_stats = 105076 [(android.os.statsd.module) = "pixelaudio"];
+      GpuFrozenAppsMemoryPerUid gpu_frozen_apps_memory_per_uid = 105078;
     }
     // AOSP atom ID range ends at 109999
     reserved 109997; // reserved for VtsVendorAtomJavaTest test atom
@@ -2579,3 +2580,15 @@ message VendorAudioUsbConfigStats {
   /* Duration in second */
   optional int32 duration_second = 7;
 };
+
+/* GPU memory allocation information for frozen apps */
+message GpuFrozenAppsMemoryPerUid {
+  /* Vendor reverse domain name (expecting "com.google.pixel"). */
+  optional string reverse_domain_name = 1;
+
+  /* UID of the frozen app. */
+  optional int32 uid = 2 [(android.os.statsd.is_uid) = true];
+
+  /* Total amount of GPU memory bytes allocated by this app. */
+  optional int64 gpu_memory_bytes = 3;
+}
