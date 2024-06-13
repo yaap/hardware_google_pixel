@@ -2230,6 +2230,7 @@ void SysfsCollector::collect(void) {
         return;
     }
 
+    ALOGI("Time-series metrics were initiated.");
     while (1) {
         int readval;
         union {
