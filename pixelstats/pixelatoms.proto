@@ -25,6 +25,7 @@ option java_package = "android.hardware.google.pixel";
 option java_outer_classname = "PixelAtoms";
 
 import "frameworks/proto_logging/stats/atom_field_options.proto";
+import "frameworks/proto_logging/stats/enums/app/app_enums.proto";
 
 /*
  * Please note that the following features are not currently supported by
@@ -120,6 +121,14 @@ message Atom {
       DisplayPortErrorStats display_port_error_stats = 105066;
       HDCPAuthTypeStats hdcp_auth_type_stats = 105067;
       DisplayPortUsage display_port_usage = 105068;
+      FuelGaugeAbnormalityReported fuel_gauge_abnormality_reported = 105069;
+      MmProcessUsageByOomGroupSnapshot mm_process_usage_by_oom_group_snapshot = 105070;
+      MmGcmaSnapshot mm_gcma_snapshot = 105071;
+      MmGcmaStats mm_gcma_stats = 105072;
+      VendorAudioUsbDeviceCapabilityStats vendor_audio_usb_device_capability_stats = 105073 [(android.os.statsd.module) = "pixelaudio"];
+      BatteryTimeToFullStatsReported battery_time_to_full_stats_reported = 105074;
+      VendorAudioDirectUsbAccessUsageStats vendor_audio_direct_usb_access_usage_stats = 105075 [(android.os.statsd.module) = "pixelaudio"];
+      VendorAudioUsbConfigStats vendor_audio_usb_config_stats = 105076 [(android.os.statsd.module) = "pixelaudio"];
     }
     // AOSP atom ID range ends at 109999
     reserved 109997; // reserved for VtsVendorAtomJavaTest test atom
@@ -214,6 +223,10 @@ message ChargeStats {
 
     /* AACR feature to record capacity */
     optional int32 charge_capacity = 16;
+
+    /* Charging Speed Indicator(CSI) status and type */
+    optional int32 csi_aggregate_status = 17;
+    optional int32 csi_aggregate_type = 18;
 }
 
 /* A message containing stats from each charge voltage tier. */
@@ -549,6 +562,8 @@ message VendorSpeakerStatsReported {
   optional int32 excursion = 5;
   /* The speaker's heart beat count */
   optional int32 heartbeat = 6;
+  /* The speaker's version */
+  optional int32 version = 7;
 }
 
 /* A message containing how many times of ufs host reset */
@@ -622,8 +637,8 @@ message PixelMmMetricsPerHour {
     optional int32 psi_mem_some_avg300_avg = 60;
     optional int32 version = 61 [deprecated = true];
     optional int64 shmem_pages = 62;
-    optional int64 page_tables_pages = 63;
-    optional int64 dmabuf_pages = 64;
+    optional int64 page_table_pages = 63;
+    optional int64 dmabuf_kb = 64;
 }
 
 /* A message containing Pixel memory metrics collected daily. */
@@ -688,9 +703,9 @@ message PixelMmMetricsPerDay {
     optional int64 thp_migration_split = 58;
     optional int64 thp_deferred_split_page = 59;
     optional int64 version = 60 [deprecated = true];
-    optional int64 cpu_total_time = 61;
-    optional int64 cpu_idle_time = 62;
-    optional int64 cpu_io_wait_time = 63;
+    optional int64 cpu_total_time_cs = 61;
+    optional int64 cpu_idle_time_cs = 62;
+    optional int64 cpu_io_wait_time_cs = 63;
     optional int64 kswapd_pageout_run = 64;
 }
 
@@ -952,6 +967,10 @@ message PowerMitigationStats {
  optional int32 soft_ocp_gpu_cap = 24;
  // The last triggered capacity: soft_ocp_tpu.
  optional int32 soft_ocp_tpu_cap = 25;
+ // The last triggered count: batoilo2.
+ optional int32 batoilo2_count = 26;
+ // The last triggered capacity: batoilo2.
+ optional int32 batoilo2_cap = 27;
 }
 
 /**
@@ -1643,6 +1662,26 @@ message BrownoutDetected {
     optional int32 dvfs_channel6 = 37;
     // brownout reason
     optional BrownoutReason brownout_reason = 38;
+    // max current
+    optional int32 max_current = 39;
+    // event counter uvlo1
+    optional int32 evt_cnt_uvlo1 = 40;
+    // event counter uvlo2
+    optional int32 evt_cnt_uvlo2 = 41;
+    // event counter oilo1
+    optional int32 evt_cnt_oilo1 = 42;
+    // event counter oilo2
+    optional int32 evt_cnt_oilo2 = 43;
+    // VIMON vbatt
+    optional int32 vimon_vbatt = 44;
+    // VIMON ibatt
+    optional int32 vimon_ibatt = 45;
+    // Mitigation Method 0
+    optional int32 mitigation_method_0 = 46;
+    // Mitigation Method 0 Entry Count
+    optional int32 mitigation_method_0_count = 47;
+    // Mitigation Method 0 Entry Time
+    optional int64 mitigation_method_0_time_us = 48;
 }
 
 /*
@@ -2150,12 +2189,20 @@ message PixelImpulseUsageReported {
       /* Client side */
       API_SERVER_START = 1001;
       API_PIXEL_STATE_CHANGE = 1002;
+      /* Internal */
+      INTERNAL_PLATFORM_CONNECTION_CONNECT = 10001;
+      INTERNAL_PLATFORM_CONNECTION_DISCONNECT = 10002;
+      INTERNAL_PLATFORM_CONNECTION_CHANGE = 10003;
+      INTERNAL_CLIENT_LISTENER_ADD = 10004;
+      INTERNAL_CLIENT_LISTENER_REMOVE = 10005;
+      INTERNAL_WAIT = 10006;
   }
   /* Invoked API name */
   optional ApiName api_name = 4;
 
   enum Tag {
       TAG_UNKNOWN = 0;
+      TAG_TEMPERATURE_READ_DELAY = 1;
   }
   /* Tag for debugging purpose */
   optional Tag tag = 5;
@@ -2185,6 +2232,34 @@ message PixelImpulseUsageReported {
 
   /* Size of the arguments */
   optional int32 request_size = 11;
+
+  /* Platform connection usage */
+  /* Used when api_name == INTERNAL_PLATFORM_CONNECTION_CHANGE */
+  optional int32 internal_platform_connection_count = 12;
+
+  /* Client state source usage */
+  /* Used when api_name == INTERNAL_CLIENT_LISTENER_* */
+  optional int32 internal_client_listener_count = 13;
+
+  enum StateSource {
+      STATE_SOURCE_UNKNOWN = 0;
+      STATE_SOURCE_UID_IMPORTANCE = 1;
+      STATE_SOURCE_CAMERA_AVAILABILITY = 2;
+      STATE_SOURCE_DROPBOX_BROADCAST = 3;
+      STATE_SOURCE_TEMPERATURE = 4;
+      STATE_SOURCE_THERMAL_STATUS = 5;
+  }
+  /* State source involved */
+  /* Used when api_name == INTERNAL_PLATFORM_CONNECTION_* or
+   * api_name == INTERNAL_CLIENT_LISTENER_* */
+  optional StateSource state_source = 14;
+
+  /* UID importance cut point */
+  /* This is the UID importance cutpoint associated with the
+   * OnUidImportanceListener
+   */
+  /* Used when state_source == STATE_SOURCE_UID_IMPORTANCE */
+  optional android.app.Importance uid_importance_cut_point = 15;
 }
 
 /**
@@ -2249,3 +2324,258 @@ message DisplayPortUsage {
   /* indicated start/stop event of DP usage */
   optional bool connected = 7;
 }
+
+/*
+ * A message containing max77779 fuel gauge abnormal events
+ * Logged from:
+ *    hardware/google/pixel/pixelstats/BatteryFGReporter.cpp
+ */
+message FuelGaugeAbnormalityReported {
+  enum Event {
+    UNKNOWN_EVENT = 0;
+    FULLCAPNOM_LOW = 1;  // unexpected fullcapnom learning (too low)
+    FULLCAPNOM_HIGH = 2; // unexpected fullcapnom learning (too high)
+    REPSOC_EDET = 3;     // empty detect false alarm
+    REPSOC_FDET = 4;     // full detect false alarm
+    REPSOC = 5;          // repsoc not accurate
+    VFOCV = 6;           // vfocv estimation wrong
+  }
+  enum EventState {
+    UNKNOWN_STATE = 0;
+    UNTRIGGER = 1;
+    TRIGGER = 2;
+  }
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+  /* Report by which event */
+  repeated Event event = 2;
+  /* State was triggered or untriggered */
+  repeated EventState event_state = 3;
+  optional int32 duration_secs = 4;
+  /* Record fuel gauge registers at the time of the event */
+  optional int32 fg_register_address_1 = 5;
+  optional int32 fg_register_data_1 = 6;
+  optional int32 fg_register_address_2 = 7;
+  optional int32 fg_register_data_2 = 8;
+  optional int32 fg_register_address_3 = 9;
+  optional int32 fg_register_data_3 = 10;
+  optional int32 fg_register_address_4 = 11;
+  optional int32 fg_register_data_4 = 12;
+  optional int32 fg_register_address_5 = 13;
+  optional int32 fg_register_data_5 = 14;
+  optional int32 fg_register_address_6 = 15;
+  optional int32 fg_register_data_6 = 16;
+  optional int32 fg_register_address_7 = 17;
+  optional int32 fg_register_data_7 = 18;
+  optional int32 fg_register_address_8 = 19;
+  optional int32 fg_register_data_8 = 20;
+  optional int32 fg_register_address_9 = 21;
+  optional int32 fg_register_data_9 = 22;
+  optional int32 fg_register_address_10 = 23;
+  optional int32 fg_register_data_10 = 24;
+  optional int32 fg_register_address_11= 25;
+  optional int32 fg_register_data_11= 26;
+  optional int32 fg_register_address_12= 27;
+  optional int32 fg_register_data_12 = 28;
+  optional int32 fg_register_address_13 = 29;
+  optional int32 fg_register_data_13 = 30;
+  optional int32 fg_register_address_14 = 31;
+  optional int32 fg_register_data_14 = 32;
+  optional int32 fg_register_address_15 = 33;
+  optional int32 fg_register_data_15 = 34;
+  optional int32 fg_register_address_16 = 35;
+  optional int32 fg_register_data_16 = 36;
+}
+
+/*
+ *  Process memory usage by Oom groups
+ */
+message MmProcessUsageByOomGroupSnapshot {
+  enum OomGroup {
+    OOMR_950 = 0;
+    OOMR_900 = 1;
+    OOMR_850 = 2;
+    OOMR_800 = 3;
+    OOMR_750 = 4;
+    OOMR_700 = 5;
+    OOMR_650 = 6;
+    OOMR_600 = 7;
+    OOMR_550 = 8;
+    OOMR_500 = 9;
+    OOMR_450 = 10;
+    OOMR_400 = 11;
+    OOMR_350 = 12;
+    OOMR_300 = 13;
+    OOMR_250 = 14;
+    OOMR_200 = 15;
+    OOMS_200 = 16;
+    OOMR_150 = 17;
+    OOMR_100 = 18;
+    OOMR_050 = 19;
+    OOMR_000 = 20;
+    OOMS_000 = 21;
+    OOMR_NEGATIVE = 22;
+    /* reserved for future error handling */
+    OOM_UNKNOWN = 999;
+  }
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+  /* Unique ID per knob read */
+  optional int32 metric_uid = 2;
+  /*
+   * This is the dimension: each knob read will create N atoms.
+   * N = number of groups defined in the enumerate above.
+   */
+  optional OomGroup oom_group = 3;
+  optional int64 nr_task = 4;
+  optional int64 file_rss = 5;
+  optional int64 anon_rss = 6;
+  optional int64 pgtable = 7;
+  optional int64 swap_ent = 8;
+  optional int64 shmem_rss = 9;
+}
+
+/*
+ * GCMA memory hourly snapshot
+ */
+message MmGcmaSnapshot {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+  /* cached memory */
+  optional int64 cached = 2;
+}
+
+/*
+ * GCMA memory daily statistics
+ */
+message MmGcmaStats {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+  /* statistics */
+  optional int64 discarded = 2;
+  optional int64 evicted = 3;
+  optional int64 loaded = 4;
+  optional int64 stored = 5;
+  repeated int64 latency_histogram = 6;
+}
+
+/*
+ * A message containing the USB audio capability of the connected accessories.
+ */
+message VendorAudioUsbDeviceCapabilityStats {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+
+  enum UsbMode {
+    UNKNOWN_MODE = 0;
+    ASYNC_MODE = 1;
+    ADAPTIVE_MODE = 2;
+    SYNC_MODE = 3;
+  }
+  /* USB Modes */
+  repeated UsbMode playback_supported_modes = 2;
+  repeated UsbMode capture_supported_modes = 3;
+
+  enum UsbSpeed {
+    OTHER_SPEED = 0;
+    FULL_SPEED = 1;
+    HIGH_SPEED = 2;
+    SUPER_SPEED = 3;
+  }
+  /* USB Speed */
+  optional UsbSpeed usb_speed = 4 [deprecated = true];
+
+  /* Data Packets Interval in ms. Expected value is between 125 and 1000.*/
+  repeated int32 playback_data_packet_interval = 5;
+  repeated int32 capture_data_packet_interval = 6;
+
+  /* List of supported sample rates in increasing order. */
+  repeated int32 playback_supported_sample_rates = 7;
+  repeated int32 capture_supported_sample_rates = 8;
+
+  /* Maximum number of channels supported */
+  optional int32 playback_supported_channel_count = 9;
+  optional int32 capture_supported_channel_count = 10;
+
+  enum PcmType {
+    DEFAULT = 0;
+    INT16_BIT = 1;
+    INT32_BIT = 2;
+    FIXED_Q824 = 3;
+    FLOAT32_BIT = 4;
+    INT24_BIT = 5;
+    DSD32_BIT = 6;
+  }
+  /* Supported PCM Type */
+  repeated PcmType playback_supported_pcm_types = 11;
+  repeated PcmType capture_supported_pcm_types = 12;
+
+  /* Supported endian */
+  optional bool is_big_endian = 13;
+
+  /* Is USB device support playback */
+  optional bool is_playback = 14;
+
+  /* Duration connected */
+  optional int32 duration_second_connected = 15;
+};
+
+/*
+ * A message containing battery time to full stats
+ * Logged from:
+ *    hardware/google/pixel/pixelstats/BatteryTTFReporter.cpp
+ */
+message BatteryTimeToFullStatsReported {
+  // Vendor reverse domain name (expecting "com.google.pixel").
+  optional string reverse_domain_name = 1;
+
+  // The charge_counter and elap of each soc
+  optional int32 ttf_type = 2;
+  optional int32 ttf_range = 3;
+  optional int32 soc_0 = 4;
+  optional int32 soc_1 = 5;
+  optional int32 soc_2 = 6;
+  optional int32 soc_3 = 7;
+  optional int32 soc_4 = 8;
+  optional int32 soc_5 = 9;
+  optional int32 soc_6 = 10;
+  optional int32 soc_7 = 11;
+  optional int32 soc_8 = 12;
+  optional int32 soc_9 = 13;
+}
+
+/*
+ * A message containing Direct USB Access event.
+ */
+message VendorAudioDirectUsbAccessUsageStats {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+
+  optional int32 duration_second = 2;
+};
+
+/*
+ * A message containing Usb Config event.
+ */
+message VendorAudioUsbConfigStats {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+
+  /* Is config for playback or capture */
+  optional bool is_playback = 2;
+
+  /* Is config for hifi */
+  optional bool has_hifi = 3;
+
+  /* Sample rate used */
+  optional int32 sample_rate = 4;
+
+  /* Channel used */
+  optional int32 channel = 5;
+
+  /* Pcm Type used */
+  optional int32 pcm_type = 6;
+
+  /* Duration in second */
+  optional int32 duration_second = 7;
+};

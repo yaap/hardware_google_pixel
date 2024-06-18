@@ -45,6 +45,8 @@ class MockThermalHelper : public ThermalHelper {
     MOCK_METHOD(bool, readTemperatureThreshold, (std::string_view, TemperatureThreshold *),
                 (const, override));
     MOCK_METHOD(bool, readCoolingDevice, (std::string_view, CoolingDevice *), (const, override));
+    MOCK_METHOD(void, dumpVtEstimatorStatus, (std::string_view, std::ostringstream *),
+                (const, override));
     MOCK_METHOD((const std::unordered_map<std::string, SensorInfo> &), GetSensorInfoMap, (),
                 (const, override));
     MOCK_METHOD((const std::unordered_map<std::string, CdevInfo> &), GetCdevInfoMap, (),
@@ -65,6 +67,7 @@ class MockThermalHelper : public ThermalHelper {
     MOCK_METHOD(bool, isAidlPowerHalExist, (), (override));
     MOCK_METHOD(bool, isPowerHalConnected, (), (override));
     MOCK_METHOD(bool, isPowerHalExtConnected, (), (override));
+    MOCK_METHOD(void, dumpTraces, (std::string_view), (override));
 };
 
 }  // namespace aidl::android::hardware::thermal::implementation

@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 
 namespace android {
@@ -47,6 +48,28 @@ struct AdpfConfig {
     // Stale control
     double mStaleTimeFactor;
 
+    std::optional<bool> mGpuBoostOn;
+    std::optional<uint64_t> mGpuBoostCapacityMax;
+    uint64_t mGpuCapacityLoadUpHeadroom;
+
+    // Heuristic boost control
+    std::optional<bool> mHeuristicBoostOn;
+    std::optional<uint32_t> mHBoostOnMissedCycles;
+    std::optional<double> mHBoostOffMaxAvgRatio;
+    std::optional<uint32_t> mHBoostOffMissedCycles;
+    std::optional<double> mHBoostPidPuFactor;
+    std::optional<uint32_t> mHBoostUclampMin;
+    std::optional<double> mJankCheckTimeFactor;
+    std::optional<uint32_t> mLowFrameRateThreshold;
+    std::optional<uint32_t> mMaxRecordsNum;
+
+    uint32_t mUclampMinLoadUp;
+    uint32_t mUclampMinLoadReset;
+
+    // Power efficient sessions
+    std::optional<int32_t> mUclampMaxEfficientBase;
+    std::optional<int32_t> mUclampMaxEfficientOffset;
+
     int64_t getPidIInitDivI();
     int64_t getPidIHighDivI();
     int64_t getPidILowDivI();
@@ -57,7 +80,17 @@ struct AdpfConfig {
                bool uclampMinOn, uint32_t uclampMinInit, uint32_t uclampMinHigh,
                uint32_t uclampMinLow, uint64_t samplingWindowP, uint64_t samplingWindowI,
                uint64_t samplingWindowD, int64_t reportingRateLimitNs, double targetTimeFactor,
-               double staleTimeFactor)
+               double staleTimeFactor, std::optional<bool> gpuBoostOn,
+               std::optional<uint64_t> gpuBoostCapacityMax, uint64_t gpuCapacityLoadUpHeadroom,
+               std::optional<bool> heuristicBoostOn, std::optional<uint32_t> hBoostOnMissedCycles,
+               std::optional<double> hBoostOffMaxAvgRatio,
+               std::optional<uint32_t> hBoostOffMissedCycles,
+               std::optional<double> hBoostPidPuFactor, std::optional<uint32_t> hBoostUclampMin,
+               std::optional<double> jankCheckTimeFactor,
+               std::optional<uint32_t> lowFrameRateThreshold, std::optional<uint32_t> maxRecordsNum,
+               uint32_t uclampMinLoadUp, uint32_t uclampMinLoadReset,
+               std::optional<int32_t> uclampMaxEfficientBase,
+               std::optional<int32_t> uclampMaxEfficientOffset)
         : mName(std::move(name)),
           mPidOn(pidOn),
           mPidPo(pidPo),
@@ -77,7 +110,23 @@ struct AdpfConfig {
           mSamplingWindowD(samplingWindowD),
           mReportingRateLimitNs(reportingRateLimitNs),
           mTargetTimeFactor(targetTimeFactor),
-          mStaleTimeFactor(staleTimeFactor) {}
+          mStaleTimeFactor(staleTimeFactor),
+          mGpuBoostOn(gpuBoostOn),
+          mGpuBoostCapacityMax(gpuBoostCapacityMax),
+          mGpuCapacityLoadUpHeadroom(gpuCapacityLoadUpHeadroom),
+          mHeuristicBoostOn(heuristicBoostOn),
+          mHBoostOnMissedCycles(hBoostOnMissedCycles),
+          mHBoostOffMaxAvgRatio(hBoostOffMaxAvgRatio),
+          mHBoostOffMissedCycles(hBoostOffMissedCycles),
+          mHBoostPidPuFactor(hBoostPidPuFactor),
+          mHBoostUclampMin(hBoostUclampMin),
+          mJankCheckTimeFactor(jankCheckTimeFactor),
+          mLowFrameRateThreshold(lowFrameRateThreshold),
+          mMaxRecordsNum(maxRecordsNum),
+          mUclampMinLoadUp(uclampMinLoadUp),
+          mUclampMinLoadReset(uclampMinLoadReset),
+          mUclampMaxEfficientBase(uclampMaxEfficientBase),
+          mUclampMaxEfficientOffset(uclampMaxEfficientOffset) {}
 };
 
 }  // namespace perfmgr

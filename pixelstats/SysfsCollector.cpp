@@ -135,7 +135,10 @@ SysfsCollector::SysfsCollector(const struct SysfsPaths &sysfs_paths)
       kOffloadEffectsDurationPath(sysfs_paths.OffloadEffectsDurationPath),
       kBluetoothAudioUsagePath(sysfs_paths.BluetoothAudioUsagePath),
       kGMSRPath(sysfs_paths.GMSRPath),
-      kMaxfgHistoryPath("/dev/maxfg_history") {}
+      kMaxfgHistoryPath("/dev/maxfg_history"),
+      kFGModelLoadingPath(sysfs_paths.FGModelLoadingPath),
+      kFGLogBufferPath(sysfs_paths.FGLogBufferPath),
+      kSpeakerVersionPath(sysfs_paths.SpeakerVersionPath) {}
 
 bool SysfsCollector::ReadFileToInt(const std::string &path, int *val) {
     return ReadFileToInt(path.c_str(), val);
@@ -209,8 +212,22 @@ void SysfsCollector::logBatteryEEPROM(const std::shared_ptr<IStats> &stats_clien
     }
 
     battery_EEPROM_reporter_.checkAndReportGMSR(stats_client, kGMSRPath);
-
     battery_EEPROM_reporter_.checkAndReportMaxfgHistory(stats_client, kMaxfgHistoryPath);
+    battery_EEPROM_reporter_.checkAndReportFGModelLoading(stats_client, kFGModelLoadingPath);
+    battery_EEPROM_reporter_.checkAndReportFGLearning(stats_client, kFGLogBufferPath);
+}
+
+/**
+ * Log battery history validation
+ */
+void SysfsCollector::logBatteryHistoryValidation() {
+    const std::shared_ptr<IStats> stats_client = getStatsService();
+    if (!stats_client) {
+        ALOGE("Unable to get AIDL Stats service");
+        return;
+    }
+
+    battery_EEPROM_reporter_.checkAndReportValidation(stats_client, kFGLogBufferPath);
 }
 
 /**
@@ -218,6 +235,13 @@ void SysfsCollector::logBatteryEEPROM(const std::shared_ptr<IStats> &stats_clien
  */
 void SysfsCollector::logBatteryHealth(const std::shared_ptr<IStats> &stats_client) {
     battery_health_reporter_.checkAndReportStatus(stats_client);
+}
+
+/**
+ * Log battery time-to-full stats
+ */
+void SysfsCollector::logBatteryTTF(const std::shared_ptr<IStats> &stats_client) {
+    battery_time_to_full_reporter_.checkAndReportStats(stats_client);
 }
 
 /**
@@ -346,7 +370,7 @@ void SysfsCollector::logSpeakerHealthStats(const std::shared_ptr<IStats> &stats_
     std::string file_contents_temperature;
     std::string file_contents_excursion;
     std::string file_contents_heartbeat;
-    int count, i;
+    int count, i, version = 0;
     float impedance_ohm[4];
     float temperature_C[4];
     float excursion_mm[4];
@@ -384,9 +408,19 @@ void SysfsCollector::logSpeakerHealthStats(const std::shared_ptr<IStats> &stats_
         return;
     }
 
+    if (kSpeakerVersionPath == nullptr || strlen(kSpeakerVersionPath) == 0) {
+        ALOGD("Audio speaker version path not specified. Keep version 0");
+    } else if (!ReadFileToInt(kSpeakerVersionPath, &version)) {
+        ALOGD("Unable to read version. Keep version 0");
+    }
+
     count = sscanf(file_contents_impedance.c_str(), "%g,%g,%g,%g", &impedance_ohm[0],
                    &impedance_ohm[1], &impedance_ohm[2], &impedance_ohm[3]);
     if (count <= 0)
+        return;
+
+    if (impedance_ohm[0] == 0 && impedance_ohm[1] == 0 && impedance_ohm[2] == 0 &&
+        impedance_ohm[3] == 0)
         return;
 
     count = sscanf(file_contents_temperature.c_str(), "%g,%g,%g,%g", &temperature_C[0],
@@ -411,6 +445,7 @@ void SysfsCollector::logSpeakerHealthStats(const std::shared_ptr<IStats> &stats_
         obj[i].set_max_temperature(static_cast<int32_t>(temperature_C[i] * 1000));
         obj[i].set_excursion(static_cast<int32_t>(excursion_mm[i] * 1000));
         obj[i].set_heartbeat(static_cast<int32_t>(heartbeat[i]));
+        obj[i].set_version(version);
 
         reportSpeakerHealthStat(stats_client, obj[i]);
     }
@@ -2078,6 +2113,7 @@ void SysfsCollector::logPerDay() {
     logBatteryChargeCycles(stats_client);
     logBatteryEEPROM(stats_client);
     logBatteryHealth(stats_client);
+    logBatteryTTF(stats_client);
     logBlockStatsReported(stats_client);
     logCodec1Failed(stats_client);
     logCodecFailed(stats_client);
@@ -2133,6 +2169,7 @@ void SysfsCollector::logBrownout() {
 
 void SysfsCollector::logOnce() {
     logBrownout();
+    logBatteryHistoryValidation();
 }
 
 void SysfsCollector::logPerHour() {

@@ -49,7 +49,7 @@ class NodeVerifier : public HintManager {
   private:
     NodeVerifier() = delete;
     NodeVerifier(NodeVerifier const &) = delete;
-    void operator=(NodeVerifier const &) = delete;
+    NodeVerifier &operator=(NodeVerifier const &) = delete;
 };
 
 }  // namespace perfmgr
@@ -84,9 +84,8 @@ static void printUsage(const char* exec_name) {
 
 static void execConfig(const std::string& json_file,
                        const std::string& hint_name, uint64_t hint_duration) {
-    std::unique_ptr<android::perfmgr::HintManager> hm =
-        android::perfmgr::HintManager::GetFromJSON(json_file);
-    if (!hm.get() || !hm->IsRunning()) {
+    android::perfmgr::HintManager *hm = android::perfmgr::HintManager::GetFromJSON(json_file);
+    if (!hm || !hm->IsRunning()) {
         LOG(ERROR) << "Failed to Parse JSON config";
     }
     std::vector<std::string> hints = hm->GetHints();
