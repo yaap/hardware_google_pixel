@@ -563,7 +563,13 @@ bool ThermalHelperImpl::readTemperature(
         }
         // Update sensor temperature time in state
         thermal_stats_helper_.updateSensorTempStatsBySeverity(sensor_name, out->throttlingStatus);
-        LOG(INFO) << sensor_name.data() << ":" << out->value << " raw data: " << sensor_log.str();
+        if (out->throttlingStatus >= sensor_info.log_level) {
+            LOG(INFO) << sensor_name.data() << ":" << out->value
+                      << " raw data: " << sensor_log.str();
+        } else {
+            LOG(VERBOSE) << sensor_name.data() << ":" << out->value
+                         << " raw data: " << sensor_log.str();
+        }
     }
 
     return true;

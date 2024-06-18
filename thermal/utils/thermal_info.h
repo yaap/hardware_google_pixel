@@ -225,6 +225,7 @@ struct SensorInfo {
     bool send_powerhint;
     bool is_watch;
     bool is_hidden;
+    ThrottlingSeverity log_level;
     std::unique_ptr<VirtualSensorInfo> virtual_sensor_info;
     std::shared_ptr<ThrottlingInfo> throttling_info;
     std::unique_ptr<PredictorInfo> predictor_info;
