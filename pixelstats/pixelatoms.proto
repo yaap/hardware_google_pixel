@@ -74,7 +74,7 @@ message Atom {
 
       CitadelVersion citadel_version = 100018; // moved from vendor proprietary
       CitadelEvent citadel_event = 100019;  // moved from vendor proprietary
-      VendorSpeakerStatsReported vendor_speaker_stats_reported = 105030;
+      VendorSpeakerStatsReported vendor_speaker_stats_reported = 105030 [(android.os.statsd.module) = "pixelaudio"];
 
       ChreHalNanoappLoadFailed chre_hal_nanoapp_load_failed =
                 105031 [(android.os.statsd.module) = "chre"];
