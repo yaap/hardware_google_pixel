@@ -158,6 +158,9 @@ ThermalHelperImpl::ThermalHelperImpl(const NotificationCallback &cb)
         ret = false;
     }
 
+    const std::string &comment = config["Comment"].asString();
+    LOG(INFO) << "Comment: " << comment;
+
     if (!ParseCoolingDevice(config, &cooling_device_info_map_)) {
         LOG(ERROR) << "Failed to parse cooling device info config";
         ret = false;
