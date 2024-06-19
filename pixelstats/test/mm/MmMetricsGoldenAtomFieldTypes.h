@@ -168,6 +168,25 @@ const int MmMetricsOomGroupMemUsage_field_types[]{
         longValue,  // shmem_rss_kb
 };
 
+const int MmMetricsGcmaPerHour_field_types[]{
+        longValue,  // GCMA.cached
+};
+
+const int MmMetricsGcmaPerDaySimple_field_types[]{
+        longValue,          // GCMA.disarded
+        longValue,          // GCMA.evicted
+        longValue,          // GCMA.loaded
+        longValue,          // GCMA.stored
+        repeatedLongValue,  // GCMA repeated type (array of histograms)
+};
+
+const int MmMetricsGcmaPerDayHistogram_field_types[]{
+        longValue,  // GCMA.latency_low
+        longValue,  // GCMA.latency_mid
+        longValue,  // GCMA.latency_high
+        longValue,  // GCMA.latency_extreme_high
+};
+
 }  // namespace mm_metrics_atom_field_test_golden_results
 
 }  // namespace pixel

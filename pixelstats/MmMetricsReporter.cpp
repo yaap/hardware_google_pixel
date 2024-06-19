@@ -190,6 +190,20 @@ bool MmMetricsReporter::checkKernelOomUsageSupport() {
     return true;
 }
 
+bool MmMetricsReporter::checkKernelGcmaSupport() {
+    std::string base_path(kGcmaBasePath);
+
+    for (auto parr : {kGcmaHourlySimpleKnobs, kGcmaHourlyHistogramKnobs}) {
+        for (auto p : kGcmaHourlySimpleKnobs) {
+            if (!file_exists((base_path + '/' + p).c_str())) {
+                ALOGE("kernel GCMA metrics not supported- %s not found.", p);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 MmMetricsReporter::MmMetricsReporter()
     : kVmstatPath("/proc/vmstat"),
       kIonTotalPoolsPath("/sys/kernel/dma_heap/total_pools_kb"),
@@ -201,10 +215,12 @@ MmMetricsReporter::MmMetricsReporter()
       kMeminfoPath("/proc/meminfo"),
       kProcStatPath("/proc/stat"),
       kProcVendorMmUsageByOom("/proc/vendor_mm/memory_usage_by_oom_score"),
+      kGcmaBasePath("/sys/kernel/vendor_mm/gcma"),
       prev_compaction_duration_(kNumCompactionDurationPrevMetrics, 0),
       prev_direct_reclaim_(kNumDirectReclaimPrevMetrics, 0) {
     ker_mm_metrics_support_ = checkKernelMMMetricSupport();
     ker_oom_usage_support_ = checkKernelOomUsageSupport();
+    ker_gcma_support_ = checkKernelGcmaSupport();
 }
 
 bool MmMetricsReporter::ReadFileToUint(const std::string &path, uint64_t *val) {
@@ -658,6 +674,14 @@ void MmMetricsReporter::logPixelMmMetricsPerHour(const std::shared_ptr<IStats> &
     }
 }
 
+void MmMetricsReporter::logGcmaPerHour(const std::shared_ptr<IStats> &stats_client) {
+    std::vector<VendorAtomValue> values = readAndGenGcmaPerHour();
+
+    if (values.size() != 0) {
+        reportVendorAtom(stats_client, PixelAtoms::Atom::kMmGcmaSnapshot, values, "MmGcmaSnapshot");
+    }
+}
+
 void MmMetricsReporter::logMmProcessUsageByOomGroupSnapshot(
         const std::shared_ptr<IStats> &stats_client) {
     if (!OomUsageSupoorted())
@@ -713,6 +737,14 @@ void MmMetricsReporter::logPixelMmMetricsPerDay(const std::shared_ptr<IStats> &s
         // Send vendor atom to IStats HAL
         reportVendorAtom(stats_client, PixelAtoms::Atom::kPixelMmMetricsPerDay, values,
                          "PixelMmMetricsPerDay");
+    }
+}
+
+void MmMetricsReporter::logGcmaPerDay(const std::shared_ptr<IStats> &stats_client) {
+    std::vector<VendorAtomValue> values = readAndGenGcmaPerDay();
+
+    if (values.size() != 0) {
+        reportVendorAtom(stats_client, PixelAtoms::Atom::kMmGcmaStats, values, "MmGcmaStats");
     }
 }
 
@@ -1658,6 +1690,65 @@ std::vector<VendorAtomValue> MmMetricsReporter::genMmProcessUsageByOomGroupSnaps
     values.push_back(VendorAtomValue(data.pgtable_kb));
     values.push_back(VendorAtomValue(data.swap_ents_kb));
     values.push_back(VendorAtomValue(data.shmem_rss_kb));
+    return values;
+}
+
+std::vector<VendorAtomValue> MmMetricsReporter::readAndGenGcmaPerHour() {
+    uint64_t val;
+    std::string path = getSysfsPath(std::string(kGcmaBasePath) + '/' + kGcmaCached);
+    std::vector<VendorAtomValue> values;
+
+    if (!GcmaSupported())
+        return values;
+
+    if (!ReadFileToUint(path, &val)) {
+        ALOGE("Error: GCMA.cached: file %s: parsed Uint failed.", path.c_str());
+    } else if (static_cast<int64_t>(val) < 0) {
+        ALOGE("Error: GCMA.cached: value overflow.");
+    } else {
+        values.push_back(VendorAtomValue(static_cast<int64_t>(val)));
+    }
+    return values;
+}
+
+std::vector<VendorAtomValue> MmMetricsReporter::readAndGenGcmaPerDay() {
+    std::vector<VendorAtomValue> values;
+    uint64_t val;
+    std::vector<int64_t> repeatedLongValue;
+    std::string path;
+    std::string base_path(kGcmaBasePath);
+
+    if (!GcmaSupported())
+        return values;
+
+    for (auto p : kGcmaHourlySimpleKnobs) {
+        path = getSysfsPath(base_path + '/' + p);
+        if (!ReadFileToUint(path, &val)) {
+            ALOGE("Error: GCMA.%s: file %s: parsed Uint failed.", p, path.c_str());
+            goto got_error;
+        } else if (static_cast<int64_t>(val) < 0) {
+            ALOGE("Error: GCMA.%s: value overflow.", p);
+            goto got_error;
+        }
+        values.push_back(VendorAtomValue(static_cast<int64_t>(val)));
+    }
+
+    for (auto p : kGcmaHourlyHistogramKnobs) {
+        path = getSysfsPath(base_path + '/' + p);
+        if (!ReadFileToUint(path, &val)) {
+            ALOGE("Error: GCMA.%s: file %s: parsed Uint failed.", p, path.c_str());
+            goto got_error;
+        } else if (static_cast<int64_t>(val) < 0) {
+            ALOGE("Error: GCMA.%s: value overflow.", p);
+            goto got_error;
+        }
+        repeatedLongValue.push_back(static_cast<int64_t>(val));
+    }
+    values.push_back(VendorAtomValue(std::optional<std::vector<int64_t>>(repeatedLongValue)));
+    return values;
+
+got_error:
+    values.clear();
     return values;
 }
 

@@ -233,6 +233,14 @@ const uint64_t MmMetricsOomGroupMemUsage_golden[2][23][7]{
         // clang-format on
 };
 
+const uint64_t MmMetricsGcmaPerHour_golden[1] = {
+        13,
+};
+
+const uint64_t MmMetricsGcmaPerDaySimple_golden[4] = {1, 2, 3, 4};
+
+const uint64_t MmMetricsGcmaPerDayHistogram_golden[4] = {5, 6, 7, 8};
+
 }  // namespace mm_metrics_reporter_test_golden_result
 
 }  // namespace pixel

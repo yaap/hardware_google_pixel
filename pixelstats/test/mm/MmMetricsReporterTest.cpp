@@ -33,9 +33,16 @@ namespace hardware {
 namespace google {
 namespace pixel {
 
+using mm_metrics_atom_field_test_golden_results::MmMetricsGcmaPerDayHistogram_field_types;
+using mm_metrics_atom_field_test_golden_results::MmMetricsGcmaPerDaySimple_field_types;
+using mm_metrics_atom_field_test_golden_results::MmMetricsGcmaPerHour_field_types;
 using mm_metrics_atom_field_test_golden_results::MmMetricsOomGroupMemUsage_field_types;
 using mm_metrics_atom_field_test_golden_results::PixelMmMetricsPerDay_field_types;
 using mm_metrics_atom_field_test_golden_results::PixelMmMetricsPerHour_field_types;
+
+using mm_metrics_reporter_test_golden_result::MmMetricsGcmaPerDayHistogram_golden;
+using mm_metrics_reporter_test_golden_result::MmMetricsGcmaPerDaySimple_golden;
+using mm_metrics_reporter_test_golden_result::MmMetricsGcmaPerHour_golden;
 using mm_metrics_reporter_test_golden_result::MmMetricsOomGroupMemUsage_golden;
 using mm_metrics_reporter_test_golden_result::PixelMmMetricsPerDay_golden;
 using mm_metrics_reporter_test_golden_result::PixelMmMetricsPerHour_golden;
@@ -264,6 +271,104 @@ TEST(MmMetricsReporterTest, MmMetricsOomGroupMemUsageMultipleFailCases) {
         ASSERT_FALSE(mreport.readMmProcessUsageByOomGroup(&ogusage))
                 << "Iteration " << test_iteration << ": test fail.";
         ASSERT_EQ(ogusage.size(), 0) << "Iteration " << test_iteration << ": test fail.";
+    }
+}
+
+TEST(MmMetricsReporterTest, MmMetricsGcmaPerHourSuccess) {
+    MockMmMetricsReporter mreport;
+    const std::string data_path = std::string(data_base_path) + "/test_data_0";
+    auto &golden = MmMetricsGcmaPerHour_golden;
+    auto &gold_ftype = MmMetricsGcmaPerHour_field_types;
+
+    constexpr int kNumFields = ARRAY_SIZE(gold_ftype);
+    constexpr int kNumLines = ARRAY_SIZE(golden);
+
+    // Check testcase consistency (if fail, the test case itself has some bug)
+    ASSERT_EQ(kNumFields, kNumLines);
+
+    // setup
+    mreport.setBasePath(data_path);
+
+    // --- start test ---
+    std::vector<VendorAtomValue> values = mreport.readAndGenGcmaPerHour();
+
+    // check size
+    ASSERT_EQ(values.size(), kNumLines);
+
+    for (int field = 0; field < kNumFields; ++field) {
+        // check type
+        EXPECT_EQ(static_cast<int>(values[field].getTag()), gold_ftype[field])
+                << "type mismatch @ field #" << field;
+
+        if (static_cast<int>(values[field].getTag()) != gold_ftype[field])
+            continue;  // no checking the value when the type is wrong.
+
+        // check value
+        EXPECT_EQ(getVendorAtomIntValue(values[field]), golden[field])
+                << "value mismatch @ field #" << field;
+    }
+}
+
+TEST(MmMetricsReporterTest, MmMetricsGcmaPerDaySuccess) {
+    MockMmMetricsReporter mreport;
+    const std::string data_path = std::string(data_base_path) + "/test_data_0";
+    auto &golden_simple = MmMetricsGcmaPerDaySimple_golden;
+    auto &golden_histogram = MmMetricsGcmaPerDayHistogram_golden;
+
+    auto &gold_simple_ftype = MmMetricsGcmaPerDaySimple_field_types;
+    auto &gold_histogram_ftype = MmMetricsGcmaPerDayHistogram_field_types;
+
+    constexpr int kNumSimpleValues = 4;
+    constexpr int kNumHistogramValues = 4;
+    // total field num in atom values need to count the histogram array as one.
+    constexpr int kNumAtomValues = kNumSimpleValues + 1;
+
+    // Check testcase consistency (if fail, the test case itself has some bug)
+    ASSERT_EQ(ARRAY_SIZE(golden_simple), kNumSimpleValues);
+    ASSERT_EQ(ARRAY_SIZE(golden_histogram), kNumHistogramValues);
+    ASSERT_EQ(ARRAY_SIZE(gold_simple_ftype), kNumSimpleValues + 1);  // count the last array type
+    ASSERT_EQ(ARRAY_SIZE(gold_histogram_ftype), kNumHistogramValues);
+
+    // setup
+    mreport.setBasePath(data_path);
+
+    // --- start test ---
+    std::vector<VendorAtomValue> values = mreport.readAndGenGcmaPerDay();
+
+    /*
+     * check size +1:
+     * Histogram in the form of a vector in the last element of 'Simple' value array.
+     */
+    ASSERT_EQ(values.size(), kNumAtomValues);
+
+    // check 'simple' values
+    for (int field = 0; field < kNumSimpleValues; ++field) {
+        // check type
+        EXPECT_EQ(static_cast<int>(values[field].getTag()), gold_simple_ftype[field])
+                << "type mismatch @ field #" << field;
+
+        if (static_cast<int>(values[field].getTag()) != gold_simple_ftype[field])
+            continue;  // no checking the value when the type is wrong.
+
+        if (field == kNumAtomValues - 1)
+            continue;  // same as break.  The last one is an array, compare type only here.
+
+        EXPECT_EQ(getVendorAtomIntValue(values[field]), golden_simple[field])
+                << "value mismatch @ field #" << field;
+    }
+
+    // check array validity
+    auto &arrAtomValue = values[kNumAtomValues - 1];
+    const std::optional<std::vector<int64_t>> &repeatedLongValue =
+            arrAtomValue.get<VendorAtomValue::repeatedLongValue>();
+    ASSERT_TRUE(repeatedLongValue.has_value());
+
+    // check array size
+    ASSERT_EQ(repeatedLongValue.value().size(), kNumHistogramValues);
+
+    // check array values
+    for (int field = 0; field < kNumHistogramValues; ++field) {
+        EXPECT_EQ(repeatedLongValue.value()[field], golden_histogram[field]);
     }
 }
 
