@@ -239,12 +239,14 @@ class Vibrator : public BnVibrator {
     std::array<uint32_t, 2> mClickEffectVol;
     std::array<uint32_t, 2> mLongEffectVol;
     std::vector<uint32_t> mEffectDurations;
+    std::vector<uint32_t> mDelayEffectDurations;
     std::future<void> mAsyncHandle;
     int32_t mCompositionSizeMax;
     struct pcm *mHapticPcm;
     int mCard;
     int mDevice;
     bool mHasHapticAlsaDevice;
+    bool mIsPrimitiveDelayEnabled;
     bool mIsUnderExternalControl;
     float mResonantFrequency;
     uint32_t mRedc{0};
