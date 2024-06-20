@@ -19,7 +19,10 @@ package {
 
 cc_test {
     name: "VibratorHalCs40l26TestSuite",
-    defaults: ["VibratorHalCs40l26TestDefaults"],
+    defaults: [
+        "VibratorHalCs40l26TestDefaults",
+        "haptics_feature_defaults",
+    ],
     srcs: [
         "test-hwcal.cpp",
         "test-hwapi.cpp",

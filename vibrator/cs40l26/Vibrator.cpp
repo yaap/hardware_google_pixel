@@ -184,12 +184,15 @@ Vibrator::Vibrator(std::unique_ptr<HwApi> hwapi, std::unique_ptr<HwCal> hwcal,
 
     mFfEffects.resize(WAVEFORM_MAX_INDEX);
     mEffectDurations.resize(WAVEFORM_MAX_INDEX);
+    mEffectBrakingDurations.resize(WAVEFORM_MAX_INDEX);
     mEffectDurations = {
 #if defined(UNSPECIFIED_ACTUATOR)
             /* For Z-LRA actuators */
-            1000, 100, 25, 1000, 300, 133, 150, 500, 100, 6, 12, 1000, 13, 5,
+            1000, 100, 25, 1000, 247, 166, 150, 500, 100, 6, 17, 1000, 13, 5,
+#elif defined(LEGACY_ZLRA_ACTUATOR)
+            1000, 100, 25, 1000, 150, 100, 150, 500, 100, 6, 25, 1000, 13, 5,
 #else
-            1000, 100, 12, 1000, 300, 133, 150, 500, 100, 5, 12, 1000, 13, 5,
+            1000, 100, 9, 1000, 300, 133, 150, 500, 100, 5, 12, 1000, 13, 5,
 #endif
     }; /* 11+3 waveforms. The duration must < UINT16_MAX */
     mEffectCustomData.reserve(WAVEFORM_MAX_INDEX);
@@ -221,6 +224,11 @@ Vibrator::Vibrator(std::unique_ptr<HwApi> hwapi, std::unique_ptr<HwCal> hwcal,
             }
             if (mFfEffects[effectIndex].id != effectIndex) {
                 ALOGW("Unexpected effect index: %d -> %d", effectIndex, mFfEffects[effectIndex].id);
+            }
+
+            if (mHwApi->hasEffectBrakingTimeBank()) {
+                mHwApi->setEffectBrakingTimeIndex(effectIndex);
+                mHwApi->getEffectBrakingTimeMs(&mEffectBrakingDurations[effectIndex]);
             }
         } else {
             /* Initiate placeholders for OWT effects. */
@@ -497,7 +505,7 @@ ndk::ScopedAStatus Vibrator::getPrimitiveDuration(CompositePrimitive primitive,
             return status;
         }
 
-        *durationMs = mEffectDurations[effectIndex];
+        *durationMs = mEffectDurations[effectIndex] + mEffectBrakingDurations[effectIndex];
     } else {
         *durationMs = 0;
     }
@@ -509,7 +517,6 @@ ndk::ScopedAStatus Vibrator::compose(const std::vector<CompositeEffect> &composi
     VFTRACE(composite, callback);
     uint16_t size;
     uint16_t nextEffectDelay;
-    uint16_t totalDuration = 0;
 
     mStatsApi->logLatencyStart(kCompositionEffectLatency);
 
@@ -521,7 +528,6 @@ ndk::ScopedAStatus Vibrator::compose(const std::vector<CompositeEffect> &composi
 
     /* Check if there is a wait before the first effect. */
     nextEffectDelay = composite.front().delayMs;
-    totalDuration += nextEffectDelay;
     if (nextEffectDelay > COMPOSE_DELAY_MAX_MS || nextEffectDelay < 0) {
         ALOGE("%s: Invalid delay %u", __func__, nextEffectDelay);
         mStatsApi->logError(kBadCompositeError);
@@ -558,7 +564,6 @@ ndk::ScopedAStatus Vibrator::compose(const std::vector<CompositeEffect> &composi
                 return status;
             }
             effectVolLevel = intensityToVolLevel(e_curr.scale, effectIndex);
-            totalDuration += mEffectDurations[effectIndex];
         }
 
         /* Fetch the next composite effect delay and fill into the current section */
@@ -573,7 +578,6 @@ ndk::ScopedAStatus Vibrator::compose(const std::vector<CompositeEffect> &composi
                 return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
             }
             nextEffectDelay = delay;
-            totalDuration += delay;
         }
 
         if (effectIndex == 0 && nextEffectDelay == 0) {
@@ -581,6 +585,9 @@ ndk::ScopedAStatus Vibrator::compose(const std::vector<CompositeEffect> &composi
             mStatsApi->logError(kBadCompositeError);
             return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
         }
+
+        nextEffectDelay += mEffectBrakingDurations[effectIndex];
+
         mStatsApi->logPrimitive(effectIndex);
         ch.constructComposeSegment(effectVolLevel, effectIndex, 0 /*repeat*/, 0 /*flags*/,
                                    nextEffectDelay /*delay*/);
@@ -1276,11 +1283,11 @@ binder_status_t Vibrator::dump(int fd, const char **args, uint32_t numArgs) {
 
     dprintf(fd, "  FF Effect:\n");
     dprintf(fd, "    Physical Waveform:\n");
-    dprintf(fd, "\tId\tIndex\tt   ->\tt'\n");
+    dprintf(fd, "\tId\tIndex\tt   ->\tt'\tBrake\n");
     for (uint8_t effectId = 0; effectId < WAVEFORM_MAX_PHYSICAL_INDEX; effectId++) {
-        dprintf(fd, "\t%d\t%d\t%d\t%d\n", mFfEffects[effectId].id,
+        dprintf(fd, "\t%d\t%d\t%d\t%d\t%d\n", mFfEffects[effectId].id,
                 mFfEffects[effectId].u.periodic.custom_data[1], mEffectDurations[effectId],
-                mFfEffects[effectId].replay.length);
+                mFfEffects[effectId].replay.length, mEffectBrakingDurations[effectId]);
     }
     dprintf(fd, "    OWT Waveform:\n");
     dprintf(fd, "\tId\tBytes\tData\n");
