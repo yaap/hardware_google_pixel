@@ -70,6 +70,8 @@ class MiscWriter {
         char dsttransition[32];
         char dstoffset[32];
         char user_preferred_resolution[32];
+        char sota_csku[8];
+        char sota_csku_signature[40];
     } __attribute__((__packed__)) bootloader_message_vendor_t;
 
     static constexpr uint32_t kThemeFlagOffsetInVendorSpace =
@@ -144,6 +146,7 @@ class MiscWriter {
     // Performs the stored MiscWriterActions. If |override_offset| is set, writes to the input
     // offset in the vendor space of /misc instead of the default offset.
     bool PerformAction(std::optional<size_t> override_offset = std::nullopt);
+    bool UpdateSotaConfig(std::optional<size_t> override_offset = std::nullopt);
 
   private:
     MiscWriterActions action_{MiscWriterActions::kUnset};
