@@ -187,7 +187,9 @@ Vibrator::Vibrator(std::unique_ptr<HwApi> hwapi, std::unique_ptr<HwCal> hwcal,
     mEffectDurations = {
 #if defined(UNSPECIFIED_ACTUATOR)
             /* For Z-LRA actuators */
-            1000, 100, 25, 1000, 300, 133, 150, 500, 100, 6, 12, 1000, 13, 5,
+            1000, 100, 25, 1000, 247, 166, 150, 500, 100, 6, 17, 1000, 13, 5,
+#elif defined(LEGACY_ZLRA_ACTUATOR)
+            1000, 100, 25, 1000, 150, 100, 150, 500, 100, 6, 25, 1000, 13, 5,
 #else
             1000, 100, 12, 1000, 300, 133, 150, 500, 100, 5, 12, 1000, 13, 5,
 #endif
