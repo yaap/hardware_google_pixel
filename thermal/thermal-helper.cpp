@@ -158,6 +158,9 @@ ThermalHelperImpl::ThermalHelperImpl(const NotificationCallback &cb)
         ret = false;
     }
 
+    const std::string &comment = config["Comment"].asString();
+    LOG(INFO) << "Comment: " << comment;
+
     if (!ParseCoolingDevice(config, &cooling_device_info_map_)) {
         LOG(ERROR) << "Failed to parse cooling device info config";
         ret = false;
@@ -563,7 +566,13 @@ bool ThermalHelperImpl::readTemperature(
         }
         // Update sensor temperature time in state
         thermal_stats_helper_.updateSensorTempStatsBySeverity(sensor_name, out->throttlingStatus);
-        LOG(INFO) << sensor_name.data() << ":" << out->value << " raw data: " << sensor_log.str();
+        if (out->throttlingStatus >= sensor_info.log_level) {
+            LOG(INFO) << sensor_name.data() << ":" << out->value
+                      << " raw data: " << sensor_log.str();
+        } else {
+            LOG(VERBOSE) << sensor_name.data() << ":" << out->value
+                         << " raw data: " << sensor_log.str();
+        }
     }
 
     return true;

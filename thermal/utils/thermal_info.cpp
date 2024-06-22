@@ -1134,6 +1134,17 @@ bool ParseSensorInfo(const Json::Value &config,
         LOG(INFO) << "Sensor[" << name << "]'s Hidden: " << std::boolalpha << is_hidden
                   << std::noboolalpha;
 
+        ThrottlingSeverity log_level = ThrottlingSeverity::NONE;
+        if (!sensors[i]["LogLevel"].empty()) {
+            const auto level = sensors[i]["LogLevel"].asInt();
+            if (level > static_cast<int>(ThrottlingSeverity::SHUTDOWN)) {
+                LOG(ERROR) << "Sensor[" << name << "]'s LogLevel is invalid";
+            } else {
+                log_level = static_cast<ThrottlingSeverity>(level);
+            }
+        }
+        LOG(INFO) << "Sensor[" << name << "]'s LogLevel: " << toString(log_level);
+
         std::array<float, kThrottlingSeverityCount> hot_thresholds;
         hot_thresholds.fill(NAN);
         std::array<float, kThrottlingSeverityCount> cold_thresholds;
@@ -1381,6 +1392,7 @@ bool ParseSensorInfo(const Json::Value &config,
                 .send_powerhint = send_powerhint,
                 .is_watch = is_watch,
                 .is_hidden = is_hidden,
+                .log_level = log_level,
                 .virtual_sensor_info = std::move(virtual_sensor_info),
                 .throttling_info = std::move(throttling_info),
                 .predictor_info = std::move(predictor_info),
