@@ -251,7 +251,7 @@ void BatteryFGReporter::checkAndReportFGAbnormality(const std::shared_ptr<IStats
                                                     const std::vector<std::string> &paths) {
     std::string path;
     struct timespec boot_time;
-    std::vector<std::vector<uint16_t>> events;
+    std::vector<std::vector<uint32_t>> events;
 
     if (paths.empty())
         return;
@@ -264,7 +264,7 @@ void BatteryFGReporter::checkAndReportFGAbnormality(const std::shared_ptr<IStats
     }
 
     clock_gettime(CLOCK_MONOTONIC, &boot_time);
-    readLogbuffer(path, kNumAbnormalEventFields, EvtFGAbnormalEvent, FormatNoAddr, last_ab_check_, events);
+    readLogbuffer(path, kNumAbnormalEventFields, EvtFGAbnormalEvent, FormatOnlyVal, last_ab_check_, events);
     for (int seq = 0; seq < events.size(); seq++) {
         if (events[seq].size() == kNumAbnormalEventFields) {
             struct BatteryFGAbnormalData data;

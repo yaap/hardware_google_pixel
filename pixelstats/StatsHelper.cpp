@@ -237,7 +237,7 @@ void reportUsbDataSessionEvent(const std::shared_ptr<IStats> &stats_client,
 
 void readLogbuffer(const std::string &buf_path, int num_fields, uint16_t code,
                    enum ReportEventFormat format, unsigned int last_check_time,
-                   std::vector<std::vector<uint16_t>> &events) {
+                   std::vector<std::vector<uint32_t>> &events) {
     char hex_str[16];
 
     snprintf(hex_str, sizeof(hex_str), "0x%X", code);
@@ -247,14 +247,14 @@ void readLogbuffer(const std::string &buf_path, int num_fields, uint16_t code,
 
 void readLogbuffer(const std::string &buf_path, int num_fields, const char *code,
                    enum ReportEventFormat format, unsigned int last_check_time,
-                   std::vector<std::vector<uint16_t>> &events) {
+                   std::vector<std::vector<uint32_t>> &events) {
     std::istringstream ss;
     std::string file_contents, line;
     int num, field_idx, pos, read;
-    unsigned int ts, reported = 0;
-    uint16_t addr, val;
+    unsigned int ts, addr, val;
+    unsigned int reported = 0;
     char type[16];
-    std::vector<uint16_t> vect(num_fields);
+    std::vector<uint32_t> vect(num_fields);
 
     if (!ReadFileToString(buf_path, &file_contents)) {
         ALOGE("Unable to read logbuffer path: %s - %s", buf_path.c_str(), strerror(errno));
@@ -274,19 +274,18 @@ void readLogbuffer(const std::string &buf_path, int num_fields, const char *code
 
         for (field_idx = 0; field_idx < num_fields; field_idx++, pos += read) {
             if (format == FormatAddrWithVal) {
-                num = sscanf(&line.c_str()[pos], " %2" SCNx16 ":%4" SCNx16 "%n", &addr, &val,
-                             &read);
+                num = sscanf(&line.c_str()[pos], "%x:%x%n", &addr, &val, &read);
                 if (num != 2 || (num_fields - field_idx < 2))
                     break;
                 vect[field_idx++] = addr;
                 vect[field_idx] = val;
             } else if (format == FormatIgnoreAddr) {
-                num = sscanf(&line.c_str()[pos], " %*2" SCNx16 ":%4" SCNx16 "%n", &val, &read);
+                num = sscanf(&line.c_str()[pos], "%*[^:]:%x%n", &val, &read);
                 if (num != 1)
                     break;
                 vect[field_idx] = val;
-            } else if (format == FormatNoAddr) {
-                 num = sscanf(&line.c_str()[pos], " %4" SCNx16 "%n", &val, &read);
+            } else if (format == FormatOnlyVal) {
+                 num = sscanf(&line.c_str()[pos], "%x%n", &val, &read);
                 if (num != 1)
                     break;
                 vect[field_idx] = val;
