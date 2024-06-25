@@ -2589,6 +2589,6 @@ message GpuFrozenAppsMemoryPerUid {
   /* UID of the frozen app. */
   optional int32 uid = 2 [(android.os.statsd.is_uid) = true];
 
-  /* Total amount of GPU memory bytes allocated by this app. */
-  optional int64 gpu_memory_bytes = 3;
+  /* Total amount of GPU memory allocated by this app, in kilobytes. */
+  optional int64 gpu_memory_kb = 3;
 }
