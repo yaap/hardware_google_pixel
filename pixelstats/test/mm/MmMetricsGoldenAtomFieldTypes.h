@@ -156,6 +156,37 @@ const int PixelMmMetricsPerDay_field_types[]{
         longValue,  // optional int64 cpu_io_wait_time_cs = 63;
         longValue,  // optional int64 kswapd_pageout_run = 64;
 };
+
+const int MmMetricsOomGroupMemUsage_field_types[]{
+        intValue,   // metric_id
+        intValue,   // oom_group
+        longValue,  // nr_task
+        longValue,  // file_rss_kb
+        longValue,  // anon_rss_kb
+        longValue,  // pgtable_kb
+        longValue,  // swap_ents_kb
+        longValue,  // shmem_rss_kb
+};
+
+const int MmMetricsGcmaPerHour_field_types[]{
+        longValue,  // GCMA.cached
+};
+
+const int MmMetricsGcmaPerDaySimple_field_types[]{
+        longValue,          // GCMA.disarded
+        longValue,          // GCMA.evicted
+        longValue,          // GCMA.loaded
+        longValue,          // GCMA.stored
+        repeatedLongValue,  // GCMA repeated type (array of histograms)
+};
+
+const int MmMetricsGcmaPerDayHistogram_field_types[]{
+        longValue,  // GCMA.latency_low
+        longValue,  // GCMA.latency_mid
+        longValue,  // GCMA.latency_high
+        longValue,  // GCMA.latency_extreme_high
+};
+
 }  // namespace mm_metrics_atom_field_test_golden_results
 
 }  // namespace pixel
