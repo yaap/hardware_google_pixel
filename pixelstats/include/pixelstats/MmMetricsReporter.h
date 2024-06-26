@@ -78,6 +78,8 @@ class MmMetricsReporter {
     void aggregatePixelMmMetricsPer5Min();
     void logPixelMmMetricsPerHour(const std::shared_ptr<IStats> &stats_client);
     void logPixelMmMetricsPerDay(const std::shared_ptr<IStats> &stats_client);
+    void logGcmaPerDay(const std::shared_ptr<IStats> &stats_client);
+    void logGcmaPerHour(const std::shared_ptr<IStats> &stats_client);
     void logMmProcessUsageByOomGroupSnapshot(const std::shared_ptr<IStats> &stats_client);
     void logCmaStatus(const std::shared_ptr<IStats> &stats_client);
     std::vector<VendorAtomValue> genPixelMmMetricsPerHour();
@@ -85,6 +87,8 @@ class MmMetricsReporter {
     bool readMmProcessUsageByOomGroup(std::vector<OomGroupMemUsage> *ogusage);
     std::vector<VendorAtomValue> genMmProcessUsageByOomGroupSnapshotAtom(
             const OomGroupMemUsage &data);
+    std::vector<VendorAtomValue> readAndGenGcmaPerHour();
+    std::vector<VendorAtomValue> readAndGenGcmaPerDay();
     virtual ~MmMetricsReporter() {}
 
   private:
@@ -162,9 +166,11 @@ class MmMetricsReporter {
 
     bool checkKernelMMMetricSupport();
     bool checkKernelOomUsageSupport();
+    bool checkKernelGcmaSupport();
 
     bool MmMetricsSupported() { return ker_mm_metrics_support_; }
     bool OomUsageSupoorted() { return ker_oom_usage_support_; }
+    bool GcmaSupported() { return ker_gcma_support_; }
 
     bool ReadFileToUint(const std::string &path, uint64_t *val);
     bool reportVendorAtom(const std::shared_ptr<IStats> &stats_client, int atom_id,
@@ -229,6 +235,26 @@ class MmMetricsReporter {
     const char *const kMeminfoPath;
     const char *const kProcStatPath;
     const char *const kProcVendorMmUsageByOom;
+    const char *const kGcmaBasePath;
+
+    // GCMA hourly metrics
+    const char *const kGcmaCached = "cached";
+
+    // GCMA hourly 1/2
+    const char *const kGcmaHourlySimpleKnobs[4] = {
+            "discarded",
+            "evicted",
+            "loaded",
+            "stored",
+    };
+
+    // GCMA hourly 2/2
+    const char *const kGcmaHourlyHistogramKnobs[4] = {
+            "latency_low",
+            "latency_mid",
+            "latency_high",
+            "latency_extreme_high",
+    };
 
     // Proto messages are 1-indexed and VendorAtom field numbers start at 2, so
     // store everything in the values array at the index of the field number
@@ -256,6 +282,7 @@ class MmMetricsReporter {
     int32_t oom_usage_uid_ = 0;
     bool ker_mm_metrics_support_;
     bool ker_oom_usage_support_;
+    bool ker_gcma_support_;
 };
 
 }  // namespace pixel

@@ -23,6 +23,7 @@ constexpr int intValue = static_cast<int>(VendorAtomValue::intValue);
 constexpr int longValue = static_cast<int>(VendorAtomValue::longValue);
 constexpr int floatValue = static_cast<int>(VendorAtomValue::floatValue);
 constexpr int stringValue = static_cast<int>(VendorAtomValue::stringValue);
+constexpr int repeatedLongValue = static_cast<int>(VendorAtomValue::repeatedLongValue);
 
 static int64_t getVendorAtomIntValue(const VendorAtomValue &v) {
     switch (v.getTag()) {
