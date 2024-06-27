@@ -130,6 +130,10 @@ message Atom {
       VendorAudioDirectUsbAccessUsageStats vendor_audio_direct_usb_access_usage_stats = 105075 [(android.os.statsd.module) = "pixelaudio"];
       VendorAudioUsbConfigStats vendor_audio_usb_config_stats = 105076 [(android.os.statsd.module) = "pixelaudio"];
       GpuFrozenAppsMemoryPerUid gpu_frozen_apps_memory_per_uid = 105078;
+      RepairModeEntered repair_mode_entered = 105079;
+      RepairModeExited repair_mode_exited = 105080;
+      RepairModeLowStorageReported repair_mode_low_storage_reported = 105081;
+      RepairModeErrorReported repair_mode_error_reported = 105082;
     }
     // AOSP atom ID range ends at 109999
     reserved 109997; // reserved for VtsVendorAtomJavaTest test atom
@@ -2591,4 +2595,90 @@ message GpuFrozenAppsMemoryPerUid {
 
   /* Total amount of GPU memory allocated by this app, in kilobytes. */
   optional int64 gpu_memory_kb = 3;
+}
+
+/**
+ * Logs for repair mode enter
+ * Logged from:
+ *   vendor/google/apps/RepairMode/
+ *
+ * Estimated Logging Rate:
+ * Peak: 5 times in 1 min | Avg: 3 times per device per year
+ */
+ message RepairModeEntered {
+  // Vendor reverse domain name (expecting "com.google.pixel").
+  optional string reverse_domain_name = 1;
+  // free storage size on device when entering repair mode in megabyte
+  optional int64 storage_size_mb = 2;
+}
+
+/**
+ * Logs for repair mode exit
+ * Logged from:
+ *   vendor/google/apps/RepairMode/
+ *
+ * Estimated Logging Rate:
+ * Peak: 5 times in 1 min | Avg: 3 times per device per year
+ */
+message RepairModeExited {
+  // Vendor reverse domain name (expecting "com.google.pixel").
+  optional string reverse_domain_name = 1;
+  // free storage size on device when exiting repair mode in megabyte
+  optional int64 storage_size_mb = 2;
+  // whether diagnostic tool is executed during repair mode
+  // false if diagnostic tool is never run
+  // true if diagnostic is run once or more
+  optional bool is_diagnostic_run = 3;
+
+  // how user auth/verify the credential to exit repair mode
+  enum ExitMethod {
+    UNSPECIFIED = 0;
+    // auth by google account
+    GAUTH = 1;
+    // auth by screen lock on the device
+    SCREEN_LOCK = 2;
+  }
+  // method for auth when exiting repair mode
+  optional ExitMethod exit_method = 4;
+}
+
+/**
+ * Logs when a user cannot enter repair mode due to insufficient storage
+ * Logged from:
+ *   vendor/google/apps/RepairMode/
+ *
+ * Estimated Logging Rate:
+ * Peak: 1 time in 5 mins | Avg: 20 times per device per year
+ */
+message RepairModeLowStorageReported {
+  // Vendor reverse domain name (expecting "com.google.pixel").
+  optional string reverse_domain_name = 1;
+  // free storage size on the device in megabyte
+  optional int64 storage_size_mb = 2;
+}
+
+/**
+ * Logs programmatic error that prevent users from entering repair mode
+ * Logged from:
+ *   vendor/google/apps/RepairMode/
+ *
+ * Estimated Logging Rate:
+ * Peak: 1 time in 3 mins | Avg: 2 times per device per year
+ */
+message RepairModeErrorReported {
+  // Vendor reverse domain name (expecting "com.google.pixel").
+  optional string reverse_domain_name = 1;
+
+  // Error type that prevent user from entering repair mode
+  enum ErrorType {
+    UNSPECIFIED = 0;
+    // Dynamic system failed to install image
+    INSTALLED_FAILED = 1;
+    // Failed to enable Dynamic system
+    ENABLE_DYN_FAILED = 2;
+    // Failed to reboot
+    REBOOT_FAILED = 3;
+  }
+
+  optional ErrorType error_type = 2;
 }
