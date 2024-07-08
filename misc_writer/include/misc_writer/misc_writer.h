@@ -71,7 +71,7 @@ class MiscWriter {
         char dstoffset[32];
         char user_preferred_resolution[32];
         char sota_csku[8];
-        char sota_csku_signature[40];
+        char sota_csku_signature[96];
     } __attribute__((__packed__)) bootloader_message_vendor_t;
 
     static constexpr uint32_t kThemeFlagOffsetInVendorSpace =
