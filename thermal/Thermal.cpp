@@ -397,9 +397,14 @@ void Thermal::dumpThrottlingInfo(std::ostringstream *dump_buf) {
                     *dump_buf << name_info_pair.second.throttling_info->k_pu[i] << " ";
                 }
                 *dump_buf << "]" << std::endl;
-                *dump_buf << "   K_i: [";
+                *dump_buf << "   K_io: [";
                 for (size_t i = 0; i < kThrottlingSeverityCount; ++i) {
-                    *dump_buf << name_info_pair.second.throttling_info->k_i[i] << " ";
+                    *dump_buf << name_info_pair.second.throttling_info->k_io[i] << " ";
+                }
+                *dump_buf << "]" << std::endl;
+                *dump_buf << "   K_iu: [";
+                for (size_t i = 0; i < kThrottlingSeverityCount; ++i) {
+                    *dump_buf << name_info_pair.second.throttling_info->k_iu[i] << " ";
                 }
                 *dump_buf << "]" << std::endl;
                 *dump_buf << "   K_d: [";
