@@ -191,7 +191,8 @@ using ProfileMap = std::unordered_map<std::string, std::unordered_map<std::strin
 struct ThrottlingInfo {
     ThrottlingArray k_po;
     ThrottlingArray k_pu;
-    ThrottlingArray k_i;
+    ThrottlingArray k_io;
+    ThrottlingArray k_iu;
     ThrottlingArray k_d;
     ThrottlingArray i_max;
     ThrottlingArray max_alloc_power;
