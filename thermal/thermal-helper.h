@@ -205,7 +205,7 @@ class ThermalHelperImpl : public ThermalHelper {
     void clearAllThrottling();
     // For thermal_watcher_'s polling thread, return the sleep interval
     std::chrono::milliseconds thermalWatcherCallbackFunc(
-            const std::set<std::string> &uevent_sensors);
+            const std::unordered_map<std::string, float> &uevent_sensor_map);
     // Return hot and cold severity status as std::pair
     std::pair<ThrottlingSeverity, ThrottlingSeverity> getSeverityFromThresholds(
             const ThrottlingArray &hot_thresholds, const ThrottlingArray &cold_thresholds,
