@@ -833,8 +833,10 @@ bool ParseSensorThrottlingInfo(
     k_po.fill(0.0);
     std::array<float, kThrottlingSeverityCount> k_pu;
     k_pu.fill(0.0);
-    std::array<float, kThrottlingSeverityCount> k_i;
-    k_i.fill(0.0);
+    std::array<float, kThrottlingSeverityCount> k_io;
+    k_io.fill(0.0);
+    std::array<float, kThrottlingSeverityCount> k_iu;
+    k_iu.fill(0.0);
     std::array<float, kThrottlingSeverityCount> k_d;
     k_d.fill(0.0);
     std::array<float, kThrottlingSeverityCount> i_max;
@@ -869,13 +871,36 @@ bool ParseSensorThrottlingInfo(
             LOG(ERROR) << "Sensor[" << name << "]: Failed to parse K_Pu";
             return false;
         }
-        LOG(INFO) << "Start to parse"
-                  << " Sensor[" << name << "]'s K_I";
-        if (sensor["PIDInfo"]["K_I"].empty() ||
-            !getFloatFromJsonValues(sensor["PIDInfo"]["K_I"], &k_i, false, false)) {
-            LOG(ERROR) << "Sensor[" << name << "]: Failed to parse K_I";
+        if (!sensor["PIDInfo"]["K_I"].empty()) {
+            if (!sensor["PIDInfo"]["K_Io"].empty() || !sensor["PIDInfo"]["K_Iu"].empty()) {
+                LOG(ERROR) << "Sensor[" << name << "]: K_Io or K_Iu cannot coexist with K_I";
+                return false;
+            }
+            LOG(INFO) << "Start to parse"
+                      << " Sensor[" << name << "]'s K_I";
+            if (!getFloatFromJsonValues(sensor["PIDInfo"]["K_I"], &k_io, false, false) ||
+                !getFloatFromJsonValues(sensor["PIDInfo"]["K_I"], &k_iu, false, false)) {
+                LOG(ERROR) << "Sensor[" << name << "]: Failed to parse K_I";
+                return false;
+            }
+        } else if (!sensor["PIDInfo"]["K_Io"].empty() && !sensor["PIDInfo"]["K_Iu"].empty()) {
+            LOG(INFO) << "Start to parse"
+                      << " Sensor[" << name << "]'s K_Io";
+            if (!getFloatFromJsonValues(sensor["PIDInfo"]["K_Io"], &k_io, false, false)) {
+                LOG(ERROR) << "Sensor[" << name << "]: Failed to parse K_Io";
+                return false;
+            }
+            LOG(INFO) << "Start to parse"
+                      << " Sensor[" << name << "]'s K_Iu";
+            if (!getFloatFromJsonValues(sensor["PIDInfo"]["K_Iu"], &k_iu, false, false)) {
+                LOG(ERROR) << "Sensor[" << name << "]: Failed to parse K_Iu";
+                return false;
+            }
+        } else {
+            LOG(ERROR) << "Sensor[" << name << "]: No K_I related settings";
             return false;
         }
+
         LOG(INFO) << "Start to parse"
                   << " Sensor[" << name << "]'s K_D";
         if (sensor["PIDInfo"]["K_D"].empty() ||
@@ -939,9 +964,10 @@ bool ParseSensorThrottlingInfo(
         bool valid_pid_combination = false;
         for (Json::Value::ArrayIndex j = 0; j < kThrottlingSeverityCount; ++j) {
             if (!std::isnan(s_power[j])) {
-                if (std::isnan(k_po[j]) || std::isnan(k_pu[j]) || std::isnan(k_i[j]) ||
-                    std::isnan(k_d[j]) || std::isnan(i_max[j]) || std::isnan(max_alloc_power[j]) ||
-                    std::isnan(min_alloc_power[j]) || std::isnan(i_cutoff[j])) {
+                if (std::isnan(k_po[j]) || std::isnan(k_pu[j]) || std::isnan(k_io[j]) ||
+                    std::isnan(k_iu[j]) || std::isnan(k_d[j]) || std::isnan(i_max[j]) ||
+                    std::isnan(max_alloc_power[j]) || std::isnan(min_alloc_power[j]) ||
+                    std::isnan(i_cutoff[j])) {
                     valid_pid_combination = false;
                     break;
                 } else {
@@ -1025,7 +1051,7 @@ bool ParseSensorThrottlingInfo(
         }
         excluded_power_info_map[power_rail] = power_weight;
     }
-    throttling_info->reset(new ThrottlingInfo{k_po, k_pu, k_i, k_d, i_max, max_alloc_power,
+    throttling_info->reset(new ThrottlingInfo{k_po, k_pu, k_io, k_iu, k_d, i_max, max_alloc_power,
                                               min_alloc_power, s_power, i_cutoff, i_default,
                                               i_default_pct, tran_cycle, excluded_power_info_map,
                                               binded_cdev_info_map, profile_map});

@@ -190,15 +190,21 @@ static int handleEvent(struct nl_msg *n, void *arg) {
     struct nlmsghdr *nlh = nlmsg_hdr(n);
     struct genlmsghdr *glh = genlmsg_hdr(nlh);
     struct nlattr *attrs[THERMAL_GENL_ATTR_MAX + 1];
-    int *tz_id = reinterpret_cast<int *>(arg);
+    std::pair<int, float> *tz_info = reinterpret_cast<std::pair<int, float> *>(arg);
+    int *tz_id = &(tz_info->first);
+    float *tz_temp = &(tz_info->second);
 
     genlmsg_parse(nlh, 0, attrs, THERMAL_GENL_ATTR_MAX, NULL);
 
     if (glh->cmd == THERMAL_GENL_EVENT_TZ_TRIP_UP) {
         LOG(INFO) << "THERMAL_GENL_EVENT_TZ_TRIP_UP";
         if (attrs[THERMAL_GENL_ATTR_TZ_ID]) {
-            LOG(INFO) << "Thermal zone id: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
             *tz_id = nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
+            LOG(INFO) << "Thermal zone id: " << *tz_id;
+        }
+        if (attrs[THERMAL_GENL_ATTR_TZ_TEMP]) {
+            *tz_temp = static_cast<float>(nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_TEMP]));
+            LOG(INFO) << "Thermal zone temp: " << *tz_temp;
         }
         if (attrs[THERMAL_GENL_ATTR_TZ_TRIP_ID])
             LOG(INFO) << "Thermal zone trip id: "
@@ -208,8 +214,12 @@ static int handleEvent(struct nl_msg *n, void *arg) {
     if (glh->cmd == THERMAL_GENL_EVENT_TZ_TRIP_DOWN) {
         LOG(INFO) << "THERMAL_GENL_EVENT_TZ_TRIP_DOWN";
         if (attrs[THERMAL_GENL_ATTR_TZ_ID]) {
-            LOG(INFO) << "Thermal zone id: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
             *tz_id = nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
+            LOG(INFO) << "Thermal zone id: " << *tz_id;
+        }
+        if (attrs[THERMAL_GENL_ATTR_TZ_TEMP]) {
+            *tz_temp = static_cast<float>(nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_TEMP]));
+            LOG(INFO) << "Thermal zone temp: " << *tz_temp;
         }
         if (attrs[THERMAL_GENL_ATTR_TZ_TRIP_ID])
             LOG(INFO) << "Thermal zone trip id: "
@@ -219,8 +229,8 @@ static int handleEvent(struct nl_msg *n, void *arg) {
     if (glh->cmd == THERMAL_GENL_EVENT_TZ_GOV_CHANGE) {
         LOG(INFO) << "THERMAL_GENL_EVENT_TZ_GOV_CHANGE";
         if (attrs[THERMAL_GENL_ATTR_TZ_ID]) {
-            LOG(INFO) << "Thermal zone id: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
             *tz_id = nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
+            LOG(INFO) << "Thermal zone id: " << *tz_id;
         }
         if (attrs[THERMAL_GENL_ATTR_GOV_NAME])
             LOG(INFO) << "Governor name: " << nla_get_string(attrs[THERMAL_GENL_ATTR_GOV_NAME]);
@@ -229,8 +239,8 @@ static int handleEvent(struct nl_msg *n, void *arg) {
     if (glh->cmd == THERMAL_GENL_EVENT_TZ_CREATE) {
         LOG(INFO) << "THERMAL_GENL_EVENT_TZ_CREATE";
         if (attrs[THERMAL_GENL_ATTR_TZ_ID]) {
-            LOG(INFO) << "Thermal zone id: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
             *tz_id = nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
+            LOG(INFO) << "Thermal zone id: " << *tz_id;
         }
         if (attrs[THERMAL_GENL_ATTR_TZ_NAME])
             LOG(INFO) << "Thermal zone name: " << nla_get_string(attrs[THERMAL_GENL_ATTR_TZ_NAME]);
@@ -239,32 +249,32 @@ static int handleEvent(struct nl_msg *n, void *arg) {
     if (glh->cmd == THERMAL_GENL_EVENT_TZ_DELETE) {
         LOG(INFO) << "THERMAL_GENL_EVENT_TZ_DELETE";
         if (attrs[THERMAL_GENL_ATTR_TZ_ID]) {
-            LOG(INFO) << "Thermal zone id: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
             *tz_id = nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
+            LOG(INFO) << "Thermal zone id: " << *tz_id;
         }
     }
 
     if (glh->cmd == THERMAL_GENL_EVENT_TZ_DISABLE) {
         LOG(INFO) << "THERMAL_GENL_EVENT_TZ_DISABLE";
         if (attrs[THERMAL_GENL_ATTR_TZ_ID]) {
-            LOG(INFO) << "Thermal zone id: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
             *tz_id = nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
+            LOG(INFO) << "Thermal zone id: " << *tz_id;
         }
     }
 
     if (glh->cmd == THERMAL_GENL_EVENT_TZ_ENABLE) {
         LOG(INFO) << "THERMAL_GENL_EVENT_TZ_ENABLE";
         if (attrs[THERMAL_GENL_ATTR_TZ_ID]) {
-            LOG(INFO) << "Thermal zone id: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
             *tz_id = nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
+            LOG(INFO) << "Thermal zone id: " << *tz_id;
         }
     }
 
     if (glh->cmd == THERMAL_GENL_EVENT_TZ_TRIP_CHANGE) {
         LOG(INFO) << "THERMAL_GENL_EVENT_TZ_TRIP_CHANGE";
         if (attrs[THERMAL_GENL_ATTR_TZ_ID]) {
-            LOG(INFO) << "Thermal zone id: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
             *tz_id = nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
+            LOG(INFO) << "Thermal zone id: " << *tz_id;
         }
         if (attrs[THERMAL_GENL_ATTR_TZ_TRIP_ID])
             LOG(INFO) << "Trip id:: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_TRIP_ID]);
@@ -293,8 +303,8 @@ static int handleEvent(struct nl_msg *n, void *arg) {
     if (glh->cmd == THERMAL_GENL_EVENT_TZ_TRIP_DELETE) {
         LOG(INFO) << "THERMAL_GENL_EVENT_TZ_TRIP_DELETE";
         if (attrs[THERMAL_GENL_ATTR_TZ_ID]) {
-            LOG(INFO) << "Thermal zone id: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
             *tz_id = nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
+            LOG(INFO) << "Thermal zone id: " << *tz_id;
         }
         if (attrs[THERMAL_GENL_ATTR_TZ_TRIP_ID])
             LOG(INFO) << "Trip id:: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_TRIP_ID]);
@@ -329,8 +339,8 @@ static int handleEvent(struct nl_msg *n, void *arg) {
     if (glh->cmd == THERMAL_GENL_SAMPLING_TEMP) {
         LOG(INFO) << "THERMAL_GENL_SAMPLING_TEMP";
         if (attrs[THERMAL_GENL_ATTR_TZ_ID]) {
-            LOG(INFO) << "Thermal zone id: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
             *tz_id = nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_ID]);
+            LOG(INFO) << "Thermal zone id: " << *tz_id;
         }
         if (attrs[THERMAL_GENL_ATTR_TZ_TEMP])
             LOG(INFO) << "Thermal zone temp: " << nla_get_u32(attrs[THERMAL_GENL_ATTR_TZ_TEMP]);
@@ -412,7 +422,7 @@ bool ThermalWatcher::startWatchingDeviceFiles() {
     }
     return false;
 }
-void ThermalWatcher::parseUevent(std::set<std::string> *sensors_set) {
+void ThermalWatcher::parseUevent(std::unordered_map<std::string, float> *sensor_map) {
     bool thermal_event = false;
     constexpr int kUeventMsgLen = 2048;
     char msg[kUeventMsgLen + 2];
@@ -453,7 +463,7 @@ void ThermalWatcher::parseUevent(std::set<std::string> *sensors_set) {
                     start_pos += 5;
                     std::string name = uevent.substr(start_pos);
                     if (monitored_sensors_.find(name) != monitored_sensors_.end()) {
-                        sensors_set->insert(name);
+                        sensor_map->insert({name, NAN});
                     }
                     break;
                 }
@@ -466,8 +476,9 @@ void ThermalWatcher::parseUevent(std::set<std::string> *sensors_set) {
 
 // TODO(b/175367921): Consider for potentially adding more type of event in the function
 // instead of just add the sensors to the list.
-void ThermalWatcher::parseGenlink(std::set<std::string> *sensors_set) {
-    int err = 0, done = 0, tz_id = -1;
+void ThermalWatcher::parseGenlink(std::unordered_map<std::string, float> *sensor_map) {
+    int err = 0, done = 0;
+    std::pair<int, float> tz_info(-1, NAN);
 
     std::unique_ptr<nl_cb, decltype(&nl_cb_put)> cb(nl_cb_alloc(NL_CB_DEFAULT), nl_cb_put);
 
@@ -475,19 +486,19 @@ void ThermalWatcher::parseGenlink(std::set<std::string> *sensors_set) {
     nl_cb_set(cb.get(), NL_CB_FINISH, NL_CB_CUSTOM, nlFinishHandle, &done);
     nl_cb_set(cb.get(), NL_CB_ACK, NL_CB_CUSTOM, nlAckHandle, &done);
     nl_cb_set(cb.get(), NL_CB_SEQ_CHECK, NL_CB_CUSTOM, nlSeqCheckHandle, &done);
-    nl_cb_set(cb.get(), NL_CB_VALID, NL_CB_CUSTOM, handleEvent, &tz_id);
+    nl_cb_set(cb.get(), NL_CB_VALID, NL_CB_CUSTOM, handleEvent, &tz_info);
 
     while (!done && !err) {
         nl_recvmsgs(sk_thermal, cb.get());
 
-        if (tz_id < 0) {
+        if (tz_info.first < 0) {
             break;
         }
 
         std::string name;
-        if (getThermalZoneTypeById(tz_id, &name) &&
+        if (getThermalZoneTypeById(tz_info.first, &name) &&
             monitored_sensors_.find(name) != monitored_sensors_.end()) {
-            sensors_set->insert(name);
+            sensor_map->insert({name, tz_info.second});
         }
     }
 }
@@ -500,7 +511,7 @@ bool ThermalWatcher::threadLoop() {
     LOG(VERBOSE) << "ThermalWatcher polling...";
 
     int fd;
-    std::set<std::string> sensors;
+    std::unordered_map<std::string, float> sensors;
 
     auto time_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(boot_clock::now() -
                                                                                  last_update_time_);

@@ -1331,16 +1331,26 @@ bool ThermalHelperImpl::readThermalSensor(std::string_view sensor_name, float *t
 }
 
 // This is called in the different thread context and will update sensor_status
-// uevent_sensors is the set of sensors which trigger uevent from thermal core driver.
+// uevent_sensors_map maps sensor which trigger uevent from thermal core driver to the temperature
+// read from uevent.
 std::chrono::milliseconds ThermalHelperImpl::thermalWatcherCallbackFunc(
-        const std::set<std::string> &uevent_sensors) {
+        const std::unordered_map<std::string, float> &uevent_sensor_map) {
     std::vector<Temperature> temps;
     std::vector<std::string> cooling_devices_to_update;
     boot_clock::time_point now = boot_clock::now();
     auto min_sleep_ms = std::chrono::milliseconds::max();
     bool power_data_is_updated = false;
 
+    for (const auto &[sensor, temp] : uevent_sensor_map) {
+        if (!std::isnan(temp)) {
+            std::unique_lock<std::shared_mutex> _lock(sensor_status_map_mutex_);
+            sensor_status_map_[sensor].thermal_cached.temp = temp;
+            sensor_status_map_[sensor].thermal_cached.timestamp = now;
+        }
+    }
+
     ATRACE_CALL();
+    // Go through all virtual and physical sensor and update if needed
     for (auto &name_status_pair : sensor_status_map_) {
         bool force_update = false;
         bool force_no_cache = false;
@@ -1375,28 +1385,38 @@ std::chrono::milliseconds ThermalHelperImpl::thermalWatcherCallbackFunc(
                 }
             }
         }
-        // Check if the sensor need to be updated
+        // Force update if it's first time we update temperature value after device boot
         if (sensor_status.last_update_time == boot_clock::time_point::min()) {
             force_update = true;
+
         } else {
+            // Handle other update event
             time_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                     now - sensor_status.last_update_time);
-            if (uevent_sensors.size()) {
+            // Update triggered from genlink or uevent
+            if (uevent_sensor_map.size()) {
+                // Checking virtual sensor
                 if (sensor_info.virtual_sensor_info != nullptr) {
                     for (size_t i = 0; i < sensor_info.virtual_sensor_info->trigger_sensors.size();
                          i++) {
-                        if (uevent_sensors.find(
+                        if (uevent_sensor_map.find(
                                     sensor_info.virtual_sensor_info->trigger_sensors[i]) !=
-                            uevent_sensors.end()) {
+                            uevent_sensor_map.end()) {
                             force_update = true;
                             break;
                         }
                     }
-                } else if (uevent_sensors.find(name_status_pair.first) != uevent_sensors.end()) {
+                } else if (uevent_sensor_map.find(name_status_pair.first) !=
+                           uevent_sensor_map.end()) {
+                    // Checking physical sensor
                     force_update = true;
-                    force_no_cache = true;
+                    if (std::isnan(uevent_sensor_map.at(name_status_pair.first))) {
+                        // Handle the case that uevent does not contain temperature
+                        force_no_cache = true;
+                    }
                 }
             } else if (time_elapsed_ms > sleep_ms) {
+                // Update triggered from normal polling cylce
                 force_update = true;
             }
         }
