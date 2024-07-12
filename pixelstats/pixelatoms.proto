@@ -1892,6 +1892,7 @@ message GpuEvent {
       MALI_PMODE_ENTRY_FAILURE = 21;
       MALI_GPU_PAGE_FAULT = 22;
       MALI_MMU_AS_ACTIVE_STUCK = 23;
+      MALI_TRACE_BUF_INVALID_SLOT = 24;
     }
 
     /* Vendor reverse domain name (expecting "com.google.pixel"). */
