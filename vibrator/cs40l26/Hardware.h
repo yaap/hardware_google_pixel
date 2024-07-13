@@ -90,7 +90,7 @@ class HwApi : public Vibrator::HwApi, private HwApiBase {
     bool setRedc(std::string value) override { return set(value, &mRedc); }
     bool setQ(std::string value) override { return set(value, &mQ); }
     bool getEffectCount(uint32_t *value) override { return get(value, &mEffectCount); }
-    bool hasEffectBrakingTimeBank() override { return mEffectBrakingTimeBank.is_open(); }
+    bool hasEffectBrakingTimeBank() override { return has(mEffectBrakingTimeBank); }
     bool setEffectBrakingTimeBank(uint32_t value) override {
         return set(value, &mEffectBrakingTimeBank);
     }
