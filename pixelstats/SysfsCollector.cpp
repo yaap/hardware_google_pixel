@@ -51,7 +51,9 @@ using android::hardware::google::pixel::PixelAtoms::BatteryCapacity;
 using android::hardware::google::pixel::PixelAtoms::BlockStatsReported;
 using android::hardware::google::pixel::PixelAtoms::BootStatsInfo;
 using android::hardware::google::pixel::PixelAtoms::DisplayPanelErrorStats;
+using android::hardware::google::pixel::PixelAtoms::DisplayPortDSCSupportCountStatsReported;
 using android::hardware::google::pixel::PixelAtoms::DisplayPortErrorStats;
+using android::hardware::google::pixel::PixelAtoms::DisplayPortMaxResolutionCountStatsReported;
 using android::hardware::google::pixel::PixelAtoms::F2fsAtomicWriteInfo;
 using android::hardware::google::pixel::PixelAtoms::F2fsCompressionInfo;
 using android::hardware::google::pixel::PixelAtoms::F2fsGcSegmentInfo;
@@ -123,6 +125,8 @@ SysfsCollector::SysfsCollector(const struct SysfsPaths &sysfs_paths)
       kWifiPcieLinkStatsPath(sysfs_paths.WifiPcieLinkStatsPath),
       kDisplayStatsPaths(sysfs_paths.DisplayStatsPaths),
       kDisplayPortStatsPaths(sysfs_paths.DisplayPortStatsPaths),
+      kDisplayPortDSCStatsPaths(sysfs_paths.DisplayPortDSCStatsPaths),
+      kDisplayPortMaxResolutionStatsPaths(sysfs_paths.DisplayPortMaxResolutionStatsPaths),
       kHDCPStatsPaths(sysfs_paths.HDCPStatsPaths),
       kPDMStatePath(sysfs_paths.PDMStatePath),
       kWavesPath(sysfs_paths.WavesPath),
@@ -470,6 +474,15 @@ void SysfsCollector::logThermalStats(const std::shared_ptr<IStats> &stats_client
     thermal_stats_reporter_.logThermalStats(stats_client, kThermalStatsPaths);
 }
 
+void SysfsCollector::logDisplayPortDSCStats(const std::shared_ptr<IStats> &stats_client) {
+    display_stats_reporter_.logDisplayStats(stats_client, kDisplayPortDSCStatsPaths,
+                                            DisplayStatsReporter::DISP_PORT_DSC_STATE);
+}
+
+void SysfsCollector::logDisplayPortMaxResolutionStats(const std::shared_ptr<IStats> &stats_client) {
+    display_stats_reporter_.logDisplayStats(stats_client, kDisplayPortMaxResolutionStatsPaths,
+                                            DisplayStatsReporter::DISP_PORT_MAX_RES_STATE);
+}
 /**
  * Report the Speech DSP state.
  */
@@ -2119,6 +2132,8 @@ void SysfsCollector::logPerDay() {
     logCodecFailed(stats_client);
     logDisplayStats(stats_client);
     logDisplayPortStats(stats_client);
+    logDisplayPortDSCStats(stats_client);
+    logDisplayPortMaxResolutionStats(stats_client);
     logHDCPStats(stats_client);
     logF2fsStats(stats_client);
     logF2fsAtomicWriteInfo(stats_client);

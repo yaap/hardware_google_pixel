@@ -75,6 +75,8 @@ class SysfsCollector {
         const std::vector<std::string> ThermalStatsPaths;
         const std::vector<std::string> DisplayStatsPaths;
         const std::vector<std::string> DisplayPortStatsPaths;
+        const std::vector<std::string> DisplayPortDSCStatsPaths;
+        const std::vector<std::string> DisplayPortMaxResolutionStatsPaths;
         const std::vector<std::string> HDCPStatsPaths;
         const char *const CCARatePath;
         const std::vector<std::pair<std::string, std::string>> TempResidencyAndResetPaths;
@@ -137,6 +139,8 @@ class SysfsCollector {
     void logMitigationDurationCounts(const std::shared_ptr<IStats> &stats_client);
     void logDisplayStats(const std::shared_ptr<IStats> &stats_client);
     void logDisplayPortStats(const std::shared_ptr<IStats> &stats_client);
+    void logDisplayPortDSCStats(const std::shared_ptr<IStats> &stats_client);
+    void logDisplayPortMaxResolutionStats(const std::shared_ptr<IStats> &stats_client);
     void logHDCPStats(const std::shared_ptr<IStats> &stats_client);
     void logVendorAudioPdmStatsReported(const std::shared_ptr<IStats> &stats_client);
 
@@ -199,6 +203,8 @@ class SysfsCollector {
     const char *const kWifiPcieLinkStatsPath;
     const std::vector<std::string> kDisplayStatsPaths;
     const std::vector<std::string> kDisplayPortStatsPaths;
+    const std::vector<std::string> kDisplayPortDSCStatsPaths;
+    const std::vector<std::string> kDisplayPortMaxResolutionStatsPaths;
     const std::vector<std::string> kHDCPStatsPaths;
     const char *const kPDMStatePath;
     const char *const kWavesPath;

@@ -134,6 +134,8 @@ message Atom {
       RepairModeExited repair_mode_exited = 105080;
       RepairModeLowStorageReported repair_mode_low_storage_reported = 105081;
       RepairModeErrorReported repair_mode_error_reported = 105082;
+      DisplayPortDSCSupportCountStatsReported display_port_dsc_support_stats = 105083;
+      DisplayPortMaxResolutionCountStatsReported display_port_max_resolution_stats = 105084;
     }
     // AOSP atom ID range ends at 109999
     reserved 109997; // reserved for VtsVendorAtomJavaTest test atom
@@ -2692,4 +2694,45 @@ message RepairModeErrorReported {
   }
 
   optional ErrorType error_type = 2;
+}
+
+/*
+ * Log if a device is plugged into a display that
+ * supports forward error correction (FEC) and
+ * display stream compression (DSC)
+ */
+message DisplayPortDSCSupportCountStatsReported{
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+
+  /* Counts of connections where FEC/DSC is
+   * supported or not
+   */
+  optional int32 fec_dsc_supported = 2;
+  optional int32 fec_dsc_not_supported = 3;
+}
+
+/*
+* A message containing the use counts of various maximum
+* resolutions the displays plugged into the phone use.
+*/
+message DisplayPortMaxResolutionCountStatsReported{
+
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+
+  /* Other Resolutions that don't fit into the current list */
+  optional int32 max_res_other = 2;
+
+  /* Predefined Resolutions */
+  optional int32 max_res_1366_768 = 3;
+  optional int32 max_res_1440_900 = 4;
+  optional int32 max_res_1600_900 = 5;
+  optional int32 max_res_1920_1080 = 6;
+  optional int32 max_res_2560_1080 = 7;
+  optional int32 max_res_2560_1440 = 8;
+  optional int32 max_res_3440_1440 = 9;
+  optional int32 max_res_3840_2160 = 10;
+  optional int32 max_res_5120_2880 = 11;
+  optional int32 max_res_7680_4320 = 12;
 }
