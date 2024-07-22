@@ -91,7 +91,7 @@ message Atom {
       BatteryHealthUsage battery_health_usage = 105038;
       F2fsSmartIdleMaintEnabledStateChanged f2fs_smart_idle_maint_enabled_state_changed = 105039;
       BlockStatsReported block_stats_reported = 105040;
-      VendorAudioHardwareStatsReported vendor_audio_hardware_stats_reported = 105041;
+      VendorAudioHardwareStatsReported vendor_audio_hardware_stats_reported = 105041 [(android.os.statsd.module) = "pixelaudio"];
 
       ThermalDfsStats thermal_dfs_stats = 105042;
       VendorLongIRQStatsReported vendor_long_irq_stats_reported = 105043;
@@ -1383,6 +1383,9 @@ message VendorAudioHardwareStatsReported {
 
   /* cca_enable: UI enable & algorithm is inactive (C2 or C4) */
   optional int32 cca_enable_count_per_day = 8;
+
+  /* version: version of the data. */
+  optional int32 version = 9;
 }
 
 /**
