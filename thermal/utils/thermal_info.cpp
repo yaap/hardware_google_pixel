@@ -876,22 +876,19 @@ bool ParseSensorThrottlingInfo(
                 LOG(ERROR) << "Sensor[" << name << "]: K_Io or K_Iu cannot coexist with K_I";
                 return false;
             }
-            LOG(INFO) << "Start to parse"
-                      << " Sensor[" << name << "]'s K_I";
+            LOG(INFO) << "Start to parse" << " Sensor[" << name << "]'s K_I";
             if (!getFloatFromJsonValues(sensor["PIDInfo"]["K_I"], &k_io, false, false) ||
                 !getFloatFromJsonValues(sensor["PIDInfo"]["K_I"], &k_iu, false, false)) {
                 LOG(ERROR) << "Sensor[" << name << "]: Failed to parse K_I";
                 return false;
             }
         } else if (!sensor["PIDInfo"]["K_Io"].empty() && !sensor["PIDInfo"]["K_Iu"].empty()) {
-            LOG(INFO) << "Start to parse"
-                      << " Sensor[" << name << "]'s K_Io";
+            LOG(INFO) << "Start to parse" << " Sensor[" << name << "]'s K_Io";
             if (!getFloatFromJsonValues(sensor["PIDInfo"]["K_Io"], &k_io, false, false)) {
                 LOG(ERROR) << "Sensor[" << name << "]: Failed to parse K_Io";
                 return false;
             }
-            LOG(INFO) << "Start to parse"
-                      << " Sensor[" << name << "]'s K_Iu";
+            LOG(INFO) << "Start to parse" << " Sensor[" << name << "]'s K_Iu";
             if (!getFloatFromJsonValues(sensor["PIDInfo"]["K_Iu"], &k_iu, false, false)) {
                 LOG(ERROR) << "Sensor[" << name << "]: Failed to parse K_Iu";
                 return false;
