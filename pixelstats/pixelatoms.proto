@@ -2209,6 +2209,7 @@ message PixelImpulseUsageReported {
   enum Tag {
       TAG_UNKNOWN = 0;
       TAG_TEMPERATURE_READ_DELAY = 1;
+      TAG_SKIN_TEMPERATURE = 2;
   }
   /* Tag for debugging purpose */
   optional Tag tag = 5;
@@ -2266,6 +2267,12 @@ message PixelImpulseUsageReported {
    */
   /* Used when state_source == STATE_SOURCE_UID_IMPORTANCE */
   optional android.app.Importance uid_importance_cut_point = 15;
+
+  /* Expected value for temperature delta in Celsius */
+  optional float expected_temperature_celsius = 16;
+
+  /* Actual value for temperature delta in Celsius */
+  optional float actual_temperature_celsius = 17;
 }
 
 /**
