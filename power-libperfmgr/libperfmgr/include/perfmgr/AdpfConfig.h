@@ -54,11 +54,12 @@ struct AdpfConfig {
 
     // Heuristic boost control
     std::optional<bool> mHeuristicBoostOn;
-    std::optional<uint32_t> mHBoostOnMissedCycles;
-    std::optional<double> mHBoostOffMaxAvgRatio;
-    std::optional<uint32_t> mHBoostOffMissedCycles;
-    std::optional<double> mHBoostPidPuFactor;
-    std::optional<uint32_t> mHBoostUclampMin;
+    std::optional<uint32_t> mHBoostModerateJankThreshold;
+    std::optional<double> mHBoostOffMaxAvgDurRatio;
+    std::optional<double> mHBoostSevereJankPidPu;
+    std::optional<uint32_t> mHBoostSevereJankThreshold;
+    std::optional<std::pair<uint32_t, uint32_t>> mHBoostUclampMinCeilingRange;
+    std::optional<std::pair<uint32_t, uint32_t>> mHBoostUclampMinFloorRange;
     std::optional<double> mJankCheckTimeFactor;
     std::optional<uint32_t> mLowFrameRateThreshold;
     std::optional<uint32_t> mMaxRecordsNum;
@@ -82,10 +83,13 @@ struct AdpfConfig {
                uint64_t samplingWindowD, int64_t reportingRateLimitNs, double targetTimeFactor,
                double staleTimeFactor, std::optional<bool> gpuBoostOn,
                std::optional<uint64_t> gpuBoostCapacityMax, uint64_t gpuCapacityLoadUpHeadroom,
-               std::optional<bool> heuristicBoostOn, std::optional<uint32_t> hBoostOnMissedCycles,
-               std::optional<double> hBoostOffMaxAvgRatio,
-               std::optional<uint32_t> hBoostOffMissedCycles,
-               std::optional<double> hBoostPidPuFactor, std::optional<uint32_t> hBoostUclampMin,
+               std::optional<bool> heuristicBoostOn,
+               std::optional<uint32_t> hBoostModerateJankThreshold,
+               std::optional<double> hBoostOffMaxAvgDurRatio,
+               std::optional<double> hBoostSevereJankPidPu,
+               std::optional<uint32_t> hBoostSevereJankThreshold,
+               std::optional<std::pair<uint32_t, uint32_t>> hBoostUclampMinCeilingRange,
+               std::optional<std::pair<uint32_t, uint32_t>> hBoostUclampMinFloorRange,
                std::optional<double> jankCheckTimeFactor,
                std::optional<uint32_t> lowFrameRateThreshold, std::optional<uint32_t> maxRecordsNum,
                uint32_t uclampMinLoadUp, uint32_t uclampMinLoadReset,
@@ -115,11 +119,12 @@ struct AdpfConfig {
           mGpuBoostCapacityMax(gpuBoostCapacityMax),
           mGpuCapacityLoadUpHeadroom(gpuCapacityLoadUpHeadroom),
           mHeuristicBoostOn(heuristicBoostOn),
-          mHBoostOnMissedCycles(hBoostOnMissedCycles),
-          mHBoostOffMaxAvgRatio(hBoostOffMaxAvgRatio),
-          mHBoostOffMissedCycles(hBoostOffMissedCycles),
-          mHBoostPidPuFactor(hBoostPidPuFactor),
-          mHBoostUclampMin(hBoostUclampMin),
+          mHBoostModerateJankThreshold(hBoostModerateJankThreshold),
+          mHBoostOffMaxAvgDurRatio(hBoostOffMaxAvgDurRatio),
+          mHBoostSevereJankPidPu(hBoostSevereJankPidPu),
+          mHBoostSevereJankThreshold(hBoostSevereJankThreshold),
+          mHBoostUclampMinCeilingRange(hBoostUclampMinCeilingRange),
+          mHBoostUclampMinFloorRange(hBoostUclampMinFloorRange),
           mJankCheckTimeFactor(jankCheckTimeFactor),
           mLowFrameRateThreshold(lowFrameRateThreshold),
           mMaxRecordsNum(maxRecordsNum),

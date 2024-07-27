@@ -180,11 +180,12 @@ constexpr char kJSON_RAW[] = R"(
             "GpuCapacityBoostMax": 300000,
             "GpuCapacityLoadUpHeadroom": 1000,
             "HeuristicBoost_On": true,
-            "HBoostOnMissedCycles": 4,
-            "HBoostOffMaxAvgRatio": 4.0,
-            "HBoostOffMissedCycles": 2,
-            "HBoostPidPuFactor": 0.5,
-            "HBoostUclampMin": 800,
+            "HBoostModerateJankThreshold": 4,
+            "HBoostOffMaxAvgDurRatio": 4.0,
+            "HBoostSevereJankPidPu": 0.5,
+            "HBoostSevereJankThreshold": 2,
+            "HBoostUclampMinCeilingRange": [480, 800],
+            "HBoostUclampMinFloorRange": [200, 400],
             "JankCheckTimeFactor": 1.2,
             "LowFrameRateThreshold": 25,
             "MaxRecordsNum": 50
@@ -834,16 +835,20 @@ TEST_F(HintManagerTest, ParseAdpfConfigsTest) {
     EXPECT_EQ(5.0, adpfs[1]->mStaleTimeFactor);
     EXPECT_TRUE(adpfs[0]->mHeuristicBoostOn.value());
     EXPECT_FALSE(adpfs[1]->mHeuristicBoostOn.has_value());
-    EXPECT_EQ(4U, adpfs[0]->mHBoostOnMissedCycles.value());
-    EXPECT_FALSE(adpfs[1]->mHBoostOnMissedCycles.has_value());
-    EXPECT_EQ(4.0, adpfs[0]->mHBoostOffMaxAvgRatio.value());
-    EXPECT_FALSE(adpfs[1]->mHBoostOffMaxAvgRatio.has_value());
-    EXPECT_EQ(2U, adpfs[0]->mHBoostOffMissedCycles.value());
-    EXPECT_FALSE(adpfs[1]->mHBoostOffMissedCycles.has_value());
-    EXPECT_EQ(0.5, adpfs[0]->mHBoostPidPuFactor.value());
-    EXPECT_FALSE(adpfs[1]->mHBoostPidPuFactor.has_value());
-    EXPECT_EQ(800U, adpfs[0]->mHBoostUclampMin.value());
-    EXPECT_FALSE(adpfs[1]->mHBoostUclampMin.has_value());
+    EXPECT_EQ(4U, adpfs[0]->mHBoostModerateJankThreshold.value());
+    EXPECT_FALSE(adpfs[1]->mHBoostModerateJankThreshold.has_value());
+    EXPECT_EQ(4.0, adpfs[0]->mHBoostOffMaxAvgDurRatio.value());
+    EXPECT_FALSE(adpfs[1]->mHBoostOffMaxAvgDurRatio.has_value());
+    EXPECT_EQ(0.5, adpfs[0]->mHBoostSevereJankPidPu.value());
+    EXPECT_FALSE(adpfs[1]->mHBoostSevereJankPidPu.has_value());
+    EXPECT_EQ(2U, adpfs[0]->mHBoostSevereJankThreshold.value());
+    EXPECT_FALSE(adpfs[1]->mHBoostSevereJankThreshold.has_value());
+    EXPECT_EQ(480U, adpfs[0]->mHBoostUclampMinCeilingRange.value().first);
+    EXPECT_EQ(800U, adpfs[0]->mHBoostUclampMinCeilingRange.value().second);
+    EXPECT_FALSE(adpfs[1]->mHBoostUclampMinCeilingRange.has_value());
+    EXPECT_EQ(200U, adpfs[0]->mHBoostUclampMinFloorRange.value().first);
+    EXPECT_EQ(400U, adpfs[0]->mHBoostUclampMinFloorRange.value().second);
+    EXPECT_FALSE(adpfs[1]->mHBoostUclampMinFloorRange.has_value());
     EXPECT_EQ(1.2, adpfs[0]->mJankCheckTimeFactor.value());
     EXPECT_FALSE(adpfs[1]->mJankCheckTimeFactor.has_value());
     EXPECT_EQ(25U, adpfs[0]->mLowFrameRateThreshold.value());
@@ -872,7 +877,7 @@ TEST_F(HintManagerTest, ParseAdpfConfigsWithoutPIDPoTest) {
 
 // Test parsing adpf configs with partially missing heuristic boost config
 TEST_F(HintManagerTest, ParseAdpfConfigsWithBrokenHBoostConfig) {
-    std::string from = "\"HBoostUclampMin\": 800,";
+    std::string from = "\"JankCheckTimeFactor\": 1.2";
     size_t start_pos = json_doc_.find(from);
     json_doc_.replace(start_pos, from.length(), "");
     std::vector<std::shared_ptr<AdpfConfig>> adpfs = HintManager::ParseAdpfConfigs(json_doc_);
