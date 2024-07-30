@@ -573,6 +573,8 @@ bool ThermalHelperImpl::readTemperature(
             LOG(VERBOSE) << sensor_name.data() << ":" << out->value
                          << " raw data: " << sensor_log.str();
         }
+        ATRACE_INT((sensor_name.data() + std::string("-severity")).c_str(),
+                   static_cast<int>(out->throttlingStatus));
     }
 
     return true;
