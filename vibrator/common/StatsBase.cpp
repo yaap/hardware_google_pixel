@@ -18,18 +18,19 @@
 
 #include <aidl/android/frameworks/stats/IStats.h>
 #include <android/binder_manager.h>
-#include <hardware/google/pixel/pixelstats/pixelatoms.pb.h>
 #include <log/log.h>
 #include <utils/Trace.h>
+#include <vibrator_atoms.h>
 
 #include <chrono>
 #include <sstream>
 
 using ::aidl::android::frameworks::stats::IStats;
 using ::aidl::android::frameworks::stats::VendorAtom;
-using ::aidl::android::frameworks::stats::VendorAtomValue;
 
-namespace PixelAtoms = ::android::hardware::google::pixel::PixelAtoms;
+namespace VibratorAtoms = ::android::hardware::google::pixel::VibratorAtoms;
+
+using VibratorAtoms::createVendorAtom;
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof((x)) / sizeof((x)[0]))
@@ -41,13 +42,13 @@ static const char *kAtomLookup[] = {"HAPTICS_PLAYCOUNTS", "HAPTICS_LATENCIES", "
 
 const char *atomToString(uint32_t atomId) {
     switch (atomId) {
-        case PixelAtoms::Atom::kVibratorPlaycountReported:
+        case VibratorAtoms::VIBRATOR_PLAYCOUNT_REPORTED:
             return kAtomLookup[0];
             break;
-        case PixelAtoms::Atom::kVibratorLatencyReported:
+        case VibratorAtoms::VIBRATOR_LATENCY_REPORTED:
             return kAtomLookup[1];
             break;
-        case PixelAtoms::Atom::kVibratorErrorsReported:
+        case VibratorAtoms::VIBRATOR_ERRORS_REPORTED:
             return kAtomLookup[2];
             break;
         default:
@@ -223,62 +224,32 @@ void StatsBase::clearData(std::vector<int32_t> *data) {
 
 VendorAtom StatsBase::vibratorPlaycountAtom() {
     STATS_TRACE("vibratorPlaycountAtom()");
-    std::vector<VendorAtomValue> values(2);
-
-    {
-        std::scoped_lock<std::mutex> lock(mDataAccess);
-        values[0].set<VendorAtomValue::repeatedIntValue>(mWaveformCounts);
-        values[1].set<VendorAtomValue::repeatedIntValue>(mDurationCounts);
-    }
-
-    return VendorAtom{
-            .reverseDomainName = "",
-            .atomId = PixelAtoms::Atom::kVibratorPlaycountReported,
-            .values = std::move(values),
-    };
+    std::scoped_lock<std::mutex> lock(mDataAccess);
+    return createVendorAtom(VibratorAtoms::VIBRATOR_PLAYCOUNT_REPORTED, "", mWaveformCounts,
+                            mDurationCounts);
 }
 
 VendorAtom StatsBase::vibratorLatencyAtom() {
     STATS_TRACE("vibratorLatencyAtom()");
-    std::vector<VendorAtomValue> values(3);
     std::vector<int32_t> avgLatencies;
 
-    {
-        std::scoped_lock<std::mutex> lock(mDataAccess);
-        for (uint32_t i = 0; i < mLatencyCounts.size(); i++) {
-            int32_t avg = 0;
-            if (mLatencyCounts[0] > 0) {
-                avg = mLatencyTotals[i] / mLatencyCounts[i];
-            }
-            avgLatencies.push_back(avg);
+    std::scoped_lock<std::mutex> lock(mDataAccess);
+    for (uint32_t i = 0; i < mLatencyCounts.size(); i++) {
+        int32_t avg = 0;
+        if (mLatencyCounts[0] > 0) {
+            avg = mLatencyTotals[i] / mLatencyCounts[i];
         }
-
-        values[0].set<VendorAtomValue::repeatedIntValue>(mMinLatencies);
-        values[1].set<VendorAtomValue::repeatedIntValue>(mMaxLatencies);
+        avgLatencies.push_back(avg);
     }
-    values[2].set<VendorAtomValue::repeatedIntValue>(avgLatencies);
 
-    return VendorAtom{
-            .reverseDomainName = "",
-            .atomId = PixelAtoms::Atom::kVibratorLatencyReported,
-            .values = std::move(values),
-    };
+    return createVendorAtom(VibratorAtoms::VIBRATOR_LATENCY_REPORTED, "", mMinLatencies,
+                            mMaxLatencies, avgLatencies);
 }
 
 VendorAtom StatsBase::vibratorErrorAtom() {
     STATS_TRACE("vibratorErrorAtom()");
-    std::vector<VendorAtomValue> values(1);
-
-    {
-        std::scoped_lock<std::mutex> lock(mDataAccess);
-        values[0].set<VendorAtomValue::repeatedIntValue>(mErrorCounts);
-    }
-
-    return VendorAtom{
-            .reverseDomainName = "",
-            .atomId = PixelAtoms::Atom::kVibratorErrorsReported,
-            .values = std::move(values),
-    };
+    std::scoped_lock<std::mutex> lock(mDataAccess);
+    return createVendorAtom(VibratorAtoms::VIBRATOR_ERRORS_REPORTED, "", mErrorCounts);
 }
 
 }  // namespace vibrator
