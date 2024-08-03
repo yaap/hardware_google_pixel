@@ -198,7 +198,7 @@ std::ostream &operator<<(std::ostream &stream, const SensorFusionType &sensor_fu
     }
 }
 
-bool ParseThermalConfig(std::string_view config_path, Json::Value *config) {
+bool LoadThermalConfig(std::string_view config_path, Json::Value *config) {
     std::string json_doc;
     if (!::android::base::ReadFileToString(config_path.data(), &json_doc)) {
         LOG(ERROR) << "Failed to read JSON config from " << config_path;
@@ -211,6 +211,62 @@ bool ParseThermalConfig(std::string_view config_path, Json::Value *config) {
         LOG(ERROR) << "Failed to parse JSON config: " << errorMessage;
         return false;
     }
+    return true;
+}
+
+void MergeConfigEntries(Json::Value *config, Json::Value *sub_config,
+                        std::string_view member_name) {
+    Json::Value &config_entries = (*config)[member_name.data()];
+    Json::Value &sub_config_entries = (*sub_config)[member_name.data()];
+    std::unordered_set<std::string> config_entries_set;
+
+    if (sub_config_entries.size() == 0) {
+        return;
+    }
+
+    for (Json::Value::ArrayIndex i = 0; i < config_entries.size(); i++) {
+        config_entries_set.insert(config_entries[i]["Name"].asString());
+    }
+
+    // Iterate through subconfig and add entries not found in main config
+    for (Json::Value::ArrayIndex i = 0; i < sub_config_entries.size(); ++i) {
+        if (config_entries_set.count(sub_config_entries[i]["Name"].asString()) == 0) {
+            config_entries.append(sub_config_entries[i]);
+        } else {
+            LOG(INFO) << "Base config entry " << sub_config_entries[i]["Name"].asString()
+                      << " is overwritten in main config";
+        }
+    }
+}
+
+bool ParseThermalConfig(std::string_view config_path, Json::Value *config,
+                        std::unordered_set<std::string> *loaded_config_paths) {
+    if (loaded_config_paths->count(config_path.data())) {
+        LOG(ERROR) << "Circular dependency detected in config " << config_path;
+        return false;
+    }
+
+    if (!LoadThermalConfig(config_path, config)) {
+        LOG(ERROR) << "Failed to read JSON config at " << config_path;
+        return false;
+    }
+
+    loaded_config_paths->insert(config_path.data());
+
+    Json::Value sub_configs_paths = (*config)["Include"];
+    for (Json::Value::ArrayIndex i = 0; i < sub_configs_paths.size(); ++i) {
+        const std::string sub_configs_path = "/vendor/etc/" + sub_configs_paths[i].asString();
+        Json::Value sub_config;
+
+        if (!ParseThermalConfig(sub_configs_path, &sub_config, loaded_config_paths)) {
+            return false;
+        }
+
+        MergeConfigEntries(config, &sub_config, "Sensors");
+        MergeConfigEntries(config, &sub_config, "CoolingDevices");
+        MergeConfigEntries(config, &sub_config, "PowerRails");
+    }
+
     return true;
 }
 
@@ -1064,12 +1120,14 @@ bool ParseSensorInfo(const Json::Value &config,
 
     LOG(INFO) << "Start reading ScalingAvailableFrequenciesPath from config";
     for (Json::Value::ArrayIndex i = 0; i < cdevs.size(); ++i) {
-        if (cdevs[i]["ScalingAvailableFrequenciesPath"].empty()) {
+        if (cdevs[i]["ScalingAvailableFrequenciesPath"].empty() ||
+            cdevs[i]["isDisabled"].asBool()) {
             continue;
         }
 
         const std::string &path = cdevs[i]["ScalingAvailableFrequenciesPath"].asString();
         const std::string &name = cdevs[i]["Name"].asString();
+
         LOG(INFO) << "Cdev[" << name << "]'s scaling frequency path: " << path;
         std::string scaling_frequency_str;
         if (::android::base::ReadFileToString(path, &scaling_frequency_str)) {
@@ -1111,6 +1169,11 @@ bool ParseSensorInfo(const Json::Value &config,
             LOG(ERROR) << "Failed to read Sensor[" << i << "]'s Name";
             sensors_parsed->clear();
             return false;
+        }
+
+        if (sensors[i]["isDisabled"].asBool()) {
+            LOG(INFO) << "sensors[" << name << "] is disabled. Skipping parsing";
+            continue;
         }
 
         auto result = sensors_name_parsed.insert(name);
@@ -1440,6 +1503,11 @@ bool ParseCoolingDevice(const Json::Value &config,
             LOG(ERROR) << "Failed to read CoolingDevice[" << i << "]'s Name";
             cooling_devices_parsed->clear();
             return false;
+        }
+
+        if (cooling_devices[i]["isDisabled"].asBool()) {
+            LOG(INFO) << "CoolingDevice[" << name << "] is disabled. Skipping parsing";
+            continue;
         }
 
         auto result = cooling_devices_name_parsed.insert(name.data());

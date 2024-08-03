@@ -153,7 +153,8 @@ ThermalHelperImpl::ThermalHelperImpl(const NotificationCallback &cb)
             ::android::base::GetBoolProperty(kThermalDisabledProperty.data(), false);
     bool ret = true;
     Json::Value config;
-    if (!ParseThermalConfig(config_path, &config)) {
+    std::unordered_set<std::string> loaded_config_paths;
+    if (!ParseThermalConfig(config_path, &config, &loaded_config_paths)) {
         LOG(ERROR) << "Failed to read JSON config";
         ret = false;
     }
