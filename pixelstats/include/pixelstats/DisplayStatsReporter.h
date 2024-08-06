@@ -41,6 +41,8 @@ class DisplayStatsReporter {
         DISP_PANEL_STATE = 0,
         DISP_PORT_STATE,
         HDCP_STATE,
+        DISP_PORT_DSC_STATE,
+        DISP_PORT_MAX_RES_STATE,
     };
     void logDisplayStats(const std::shared_ptr<IStats> &stats_client,
                          const std::vector<std::string> &display_stats_paths,
@@ -116,6 +118,26 @@ class DisplayStatsReporter {
                               const std::vector<std::string> &hdcp_stats_paths);
     bool captureHDCPAuthTypeStats(const std::vector<std::string> &hdcp_stats_paths,
                                   int64_t *cur_data);
+
+    /* displayport FEC/DSC state */
+    /* Set the number of paths needed to be collected */
+    static constexpr int DISPLAY_PORT_DSC_STATS_SIZE = 2;
+
+    int64_t prev_dp_dsc_data_[DISPLAY_PORT_DSC_STATS_SIZE] = {0};
+    void logDisplayPortFECDSCStats(const std::shared_ptr<IStats> &stats_client,
+                                   const std::vector<std::string> &displayport_fecdsc_stats_paths);
+    bool captureDisplayPortFECDSCStats(
+            const std::vector<std::string> &displayport_fecdsc_stats_paths, int64_t *cur_data);
+
+    /* displayport maximum resolution state */
+    /* Set the number of paths needed to be collected */
+    static constexpr int DISPLAY_PORT_MAX_RES_STATS_SIZE = 11;
+
+    int64_t prev_dp_max_res_data_[DISPLAY_PORT_MAX_RES_STATS_SIZE] = {0};
+    void logDisplayPortMaxResStats(const std::shared_ptr<IStats> &stats_client,
+                                   const std::vector<std::string> &displayport_max_res_stats_paths);
+    bool captureDisplayPortMaxResStats(
+            const std::vector<std::string> &displayport_max_res_stats_paths, int64_t *cur_data);
 };
 
 }  // namespace pixel
