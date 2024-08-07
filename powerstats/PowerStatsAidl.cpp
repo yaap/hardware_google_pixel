@@ -285,15 +285,15 @@ void PowerStats::dumpStateResidency(std::ostringstream &oss, bool delta) {
     const char *dataFormatDelta = "  %16s   %18s   %13" PRIu64 " ms (%14" PRId64 ")   %15" PRIu64
                                   " (%16" PRId64 ")   %14" PRIu64 " ms (%14" PRId64 ")\n";
 
-    // Construct maps to entity and state names
-    std::unordered_map<int32_t, std::string> entityNames;
-    std::unordered_map<int32_t, std::unordered_map<int32_t, std::string>> stateNames;
-    getEntityStateNames(&entityNames, &stateNames);
-
     oss << "\n============= PowerStats HAL 2.0 state residencies ==============\n";
 
     std::vector<StateResidencyResult> results;
     getStateResidency({}, &results);
+
+    // Construct maps to entity and state names
+    std::unordered_map<int32_t, std::string> entityNames;
+    std::unordered_map<int32_t, std::unordered_map<int32_t, std::string>> stateNames;
+    getEntityStateNames(&entityNames, &stateNames);
 
     if (delta) {
         static std::vector<StateResidencyResult> prevResults;
