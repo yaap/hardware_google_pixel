@@ -182,7 +182,7 @@ bool MiscWriter::UpdateSotaConfig(std::optional<size_t> override_offset) {
   signature += ::android::base::GetProperty("persist.vendor.factoryota.signature1", "");
   signature += ::android::base::GetProperty("persist.vendor.factoryota.signature2", "");
   signature += ::android::base::GetProperty("persist.vendor.factoryota.signature3", "");
-  if (content.size() != 0) {
+  if (signature.size() != 0) {
     LOG(INFO) << "persist.vendor.factoryota.signature=" << signature;
     if (signature.length() != 2 * sizeof(bootloader_message_vendor_t::sota_csku_signature)) {
       LOG(ERROR) << "signature.length() should be "
