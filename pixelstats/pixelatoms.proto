@@ -109,14 +109,14 @@ message Atom {
       PowerMitigationDurationCounts mitigation_duration = 105054; // moved from atoms.proto
       DisplayPanelErrorStats display_panel_error_stats = 105055;
       VendorAudioPdmStatsReported vendor_audio_pdm_stats_reported = 105056;
-      VendorAudioThirdPartyEffectStatsReported vendor_audio_third_party_effect_stats_reported = 105057;
+      VendorAudioThirdPartyEffectStatsReported vendor_audio_third_party_effect_stats_reported = 105057 [(android.os.statsd.module) = "pixelaudio"];
       VendorAudioAdaptedInfoStatsReported vendor_audio_adapted_info_stats_reported = 105058;
       GpuEvent gpu_event = 105059;
-      VendorAudioPcmStatsReported vendor_audio_pcm_stats_reported = 105060;
+      VendorAudioPcmStatsReported vendor_audio_pcm_stats_reported = 105060 [(android.os.statsd.module) = "pixelaudio"];
       VendorUsbDataSessionEvent vendor_usb_data_session_event = 105061;
       ThermalSensorAbnormalityDetected thermal_sensor_abnormality_detected = 105062;
       VendorAudioOffloadedEffectStatsReported vendor_audio_offloaded_effect_stats_reported = 105063;
-      VendorAudioBtMediaStatsReported vendor_audio_bt_media_stats_reported = 105064;
+      VendorAudioBtMediaStatsReported vendor_audio_bt_media_stats_reported = 105064 [(android.os.statsd.module) = "pixelaudio"];
       PixelImpulseUsageReported pixel_impulse_usage_reported = 105065;
       DisplayPortErrorStats display_port_error_stats = 105066;
       HDCPAuthTypeStats hdcp_auth_type_stats = 105067;
@@ -136,6 +136,7 @@ message Atom {
       RepairModeErrorReported repair_mode_error_reported = 105082;
       DisplayPortDSCSupportCountStatsReported display_port_dsc_support_stats = 105083;
       DisplayPortMaxResolutionCountStatsReported display_port_max_resolution_stats = 105084;
+      VendorAudioDspRecordUsageStatsReported vendor_audio_dsp_record_usage_stats_reported = 105085 [(android.os.statsd.module) = "pixelaudio"];
     }
     // AOSP atom ID range ends at 109999
     reserved 109997; // reserved for VtsVendorAtomJavaTest test atom
@@ -2736,3 +2737,44 @@ message DisplayPortMaxResolutionCountStatsReported{
   optional int32 max_res_5120_2880 = 11;
   optional int32 max_res_7680_4320 = 12;
 }
+
+/*
+ * A message containing recording usage event.
+ * Logged from:
+ *   vendor/google/whitechapel/audio/hal/aidl/audio/metric/suez_data_adapter/statsd_suez_data_adapter.cc
+ *
+ * Estimated Logging Rate: Once per audio recording.
+ */
+message VendorAudioDspRecordUsageStatsReported {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+
+  enum Type {
+    UNKNOWN = 0;
+    UC_AUDIO_RECORD = 1;
+    UC_LOW_LATENCY_AUDIO_RECORD = 2;
+    UC_MMAP_RECORD = 3;
+    IN_HANDSET_MIC = 4;
+    IN_HANDSET_DUAL_MIC = 5;
+    IN_HANDSET_TRIPLE_MIC = 6;
+    IN_CAMCORDER_LANDSCAPE = 7;
+    IN_CAMCORDER_INVERT_LANDSCAPE = 8;
+    IN_CAMCORDER_PORTRAIT = 9;
+    IN_CAMCORDER_SELFIE_LANDSCAPE = 10;
+    IN_CAMCORDER_SELFIE_INVERT_LANDSCAPE = 11;
+    IN_CAMCORDER_SELFIE_PORTRAIT = 12;
+    IN_CAMCORDER_MIC = 13;
+    IN_CAMCORDER_TIRPLE_MIC = 14;
+    CUSTOM_IN_PCM1 = 15;
+    CUSTOM_IN_PCM2 = 16;
+    CUSTOM_IN_PCM3 = 17;
+    CUSTOM_IN_PCM4 = 18;
+    CUSTOM_IN_PCM5 = 19;
+  }
+
+  /* Type of Backend used in recording */
+  optional Type type = 2;
+
+  /* Duration in second */
+  optional int32 duration_second = 3;
+};
