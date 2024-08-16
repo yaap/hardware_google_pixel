@@ -57,7 +57,7 @@ message Atom {
       PixelMmMetricsPerDay pixel_mm_metrics_per_day = 105016;
       F2fsCompressionInfo f2fs_compression_info = 105017;
       VendorChargeCycles vendor_charge_cycles = 105018; // moved from atoms.proto
-      VendorHardwareFailed vendor_hardware_failed = 105019; // moved from atoms.proto
+      VendorHardwareFailed vendor_hardware_failed = 105019 [(android.os.statsd.module) = "pixelaudio"]; // moved from atoms.proto
       VendorSlowIo vendor_slow_io = 105020; // moved from atoms.proto
       VendorSpeechDspStat vendor_speech_dsp_stat = 105021; // moved from atoms.proto
       VendorPhysicalDropDetected vendor_physical_drop_detected =
@@ -810,7 +810,14 @@ message VendorHardwareFailed {
       FINGERPRINT_TOO_MANY_DEAD_PIXELS = 5;
       DEGRADE = 6;
     }
-    optional int32 failure_code = 4;
+    optional HardwareErrorCode failure_code = 4;
+
+    enum EventType {
+      UNKNOWN_EVENT = 0;
+      VOICE_CALL = 1;
+      VOIP_CALL = 2;
+    }
+    optional EventType event_type = 5;
 }
 
 /**
