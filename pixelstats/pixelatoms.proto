@@ -57,7 +57,7 @@ message Atom {
       PixelMmMetricsPerDay pixel_mm_metrics_per_day = 105016;
       F2fsCompressionInfo f2fs_compression_info = 105017;
       VendorChargeCycles vendor_charge_cycles = 105018; // moved from atoms.proto
-      VendorHardwareFailed vendor_hardware_failed = 105019; // moved from atoms.proto
+      VendorHardwareFailed vendor_hardware_failed = 105019 [(android.os.statsd.module) = "pixelaudio"]; // moved from atoms.proto
       VendorSlowIo vendor_slow_io = 105020; // moved from atoms.proto
       VendorSpeechDspStat vendor_speech_dsp_stat = 105021; // moved from atoms.proto
       VendorPhysicalDropDetected vendor_physical_drop_detected =
@@ -137,6 +137,7 @@ message Atom {
       DisplayPortDSCSupportCountStatsReported display_port_dsc_support_stats = 105083;
       DisplayPortMaxResolutionCountStatsReported display_port_max_resolution_stats = 105084;
       VendorAudioDspRecordUsageStatsReported vendor_audio_dsp_record_usage_stats_reported = 105085 [(android.os.statsd.module) = "pixelaudio"];
+      VendorAudioUsbConnectionState vendor_audio_usb_connection_state = 105086 [(android.os.statsd.module) = "pixelaudio"];
     }
     // AOSP atom ID range ends at 109999
     reserved 109997; // reserved for VtsVendorAtomJavaTest test atom
@@ -810,7 +811,14 @@ message VendorHardwareFailed {
       FINGERPRINT_TOO_MANY_DEAD_PIXELS = 5;
       DEGRADE = 6;
     }
-    optional int32 failure_code = 4;
+    optional HardwareErrorCode failure_code = 4;
+
+    enum EventType {
+      UNKNOWN_EVENT = 0;
+      VOICE_CALL = 1;
+      VOIP_CALL = 2;
+    }
+    optional EventType event_type = 5;
 }
 
 /**
@@ -2777,4 +2785,41 @@ message VendorAudioDspRecordUsageStatsReported {
 
   /* Duration in second */
   optional int32 duration_second = 3;
+};
+
+/*
+ * A message containing USB audio connection error event.
+ * Logged from:
+ *   vendor/google/whitechapel/audio/hal/aidl/audio/metric/suez_data_adapter/statsd_suez_data_adapter.cc
+ *
+ * Estimated Logging Rate: Very low, around once a month per user.
+ */
+message VendorAudioUsbConnectionState {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+
+  enum ConnectionState {
+    UNKNOWN_CONNECTION_STATE = 0;
+    FAILED_TO_READ_CARD_ID_PCM_ID = 1;
+    FAILED_TO_READ_USB_ID = 2;
+    FAILED_TO_READ_BUS_ID_DEVICE_ID = 3;
+    FAILED_TO_ADD_NEW_DEVICE = 4;
+    FAILED_TO_PARSE_USB_CAPABILITY = 5;
+    FAILED_TO_PARSE_USB_CAPABILITY_IS_EMPTY = 6;
+    FAILED_TO_ADD_NEW_DEVICE_CAPABILITY = 7;
+    FAILED_TO_ADD_ALREADY_CONNECTED_PORT_ID = 8;
+    CONNECTION_SUCCESS = 9;
+  }
+
+  enum DisconnectionState {
+    UNKNOWN_DISCONNECTION_STATE = 0;
+    FAILED_PORT_ID_NOT_CONNECTED = 1;
+    DISCONNECTION_SUCCESS = 2;
+  }
+
+  /* Connection State. UNKNOWN_CONNECTION_STATE in disconnection event. */
+  optional ConnectionState connection_error = 2;
+
+  /* Disconnection State. UNKNOWN_DISCONNECTION_STATE in connection event. */
+  optional DisconnectionState disconnection_error = 3;
 };
