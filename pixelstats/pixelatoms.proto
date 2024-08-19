@@ -2216,6 +2216,8 @@ message PixelImpulseUsageReported {
       INTERNAL_CLIENT_LISTENER_ADD = 10004;
       INTERNAL_CLIENT_LISTENER_REMOVE = 10005;
       INTERNAL_WAIT = 10006;
+      INTERNAL_COROUTINE_ENQUEUE = 10007;
+      INTERNAL_COROUTINE_RUN = 10008;
   }
   /* Invoked API name */
   optional ApiName api_name = 4;
@@ -2224,6 +2226,8 @@ message PixelImpulseUsageReported {
       TAG_UNKNOWN = 0;
       TAG_TEMPERATURE_READ_DELAY = 1;
       TAG_SKIN_TEMPERATURE = 2;
+      TAG_BUSINESS_SCOPE = 3;
+      TAG_NON_BUSINESS_SCOPE = 4;
   }
   /* Tag for debugging purpose */
   optional Tag tag = 5;
