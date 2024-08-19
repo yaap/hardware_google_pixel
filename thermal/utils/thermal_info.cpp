@@ -1537,19 +1537,14 @@ bool ParseCoolingDevice(const Json::Value &config,
         std::vector<float> state2power;
         Json::Value values = cooling_devices[i]["State2Power"];
         if (values.size()) {
+            LOG(INFO) << "Cooling device " << name << " use State2power read from config";
             state2power.reserve(values.size());
             for (Json::Value::ArrayIndex j = 0; j < values.size(); ++j) {
                 state2power.emplace_back(getFloatFromValue(values[j]));
-                LOG(INFO) << "Cooling device[" << name << "]'s Power2State[" << j
-                          << "]: " << state2power[j];
-                if (j > 0 && state2power[j] < state2power[j - 1]) {
-                    LOG(ERROR) << "Higher power with higher state on cooling device " << name
-                               << "'s state" << j;
-                }
             }
         } else {
             LOG(INFO) << "CoolingDevice[" << i << "]'s Name: " << name
-                      << " does not support State2Power";
+                      << " does not support State2Power in thermal config";
         }
 
         const std::string &power_rail = cooling_devices[i]["PowerRail"].asString();
