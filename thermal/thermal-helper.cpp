@@ -1366,7 +1366,6 @@ std::chrono::milliseconds ThermalHelperImpl::thermalWatcherCallbackFunc(
         bool force_update = false;
         bool force_no_cache = false;
         Temperature temp;
-        TemperatureThreshold threshold;
         SensorStatus &sensor_status = name_status_pair.second;
         const SensorInfo &sensor_info = sensor_info_map_.at(name_status_pair.first);
         bool max_throttling = false;
@@ -1458,11 +1457,6 @@ std::chrono::milliseconds ThermalHelperImpl::thermalWatcherCallbackFunc(
         if (!readTemperature(name_status_pair.first, &temp, &throttling_status, force_no_cache)) {
             LOG(ERROR) << __func__
                        << ": error reading temperature for sensor: " << name_status_pair.first;
-            continue;
-        }
-        if (!readTemperatureThreshold(name_status_pair.first, &threshold)) {
-            LOG(ERROR) << __func__ << ": error reading temperature threshold for sensor: "
-                       << name_status_pair.first;
             continue;
         }
 
