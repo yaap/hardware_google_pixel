@@ -138,6 +138,7 @@ message Atom {
       DisplayPortMaxResolutionCountStatsReported display_port_max_resolution_stats = 105084;
       VendorAudioDspRecordUsageStatsReported vendor_audio_dsp_record_usage_stats_reported = 105085 [(android.os.statsd.module) = "pixelaudio"];
       VendorAudioUsbConnectionState vendor_audio_usb_connection_state = 105086 [(android.os.statsd.module) = "pixelaudio"];
+      VendorAudioSpeakerPowerStatsReported vendor_audio_speaker_power_stats_reported = 105087 [(android.os.statsd.module) = "pixelaudio"];
     }
     // AOSP atom ID range ends at 109999
     reserved 109997; // reserved for VtsVendorAtomJavaTest test atom
@@ -2827,3 +2828,19 @@ message VendorAudioUsbConnectionState {
   /* Disconnection State. UNKNOWN_DISCONNECTION_STATE in connection event. */
   optional DisconnectionState disconnection_error = 3;
 };
+
+/*
+ * Logs the Audio Speaker Power information stats.
+ * Logged from:
+ *   vendor/google/whitechapel/audio/hal/aidl/audio/metric/suez_data_adapter/statsd_suez_data_adapter.cc
+ *
+ * Estimated Logging Rate: Once per audio playback through speaker.
+ */
+message VendorAudioSpeakerPowerStatsReported {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+  /* The average power of the speaker. i-th value represent i-th speaker. There are at most 4 speakers. */
+  repeated float average_power = 2;
+  /* Duration in second that speaker is using the average power. i-th value represent i-th speaker. There are at most 4 speakers. */
+  repeated int32 duration_second = 3;
+}
