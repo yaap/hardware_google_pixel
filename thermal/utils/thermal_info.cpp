@@ -193,6 +193,8 @@ std::ostream &operator<<(std::ostream &stream, const SensorFusionType &sensor_fu
             return stream << "ODPM";
         case SensorFusionType::CONSTANT:
             return stream << "CONSTANT";
+        case SensorFusionType::CDEV:
+            return stream << "CDEV";
         default:
             return stream << "UNDEFINED";
     }
@@ -378,6 +380,8 @@ bool ParseVirtualSensorInfo(const std::string_view name, const Json::Value &sens
                 linked_sensors_type.emplace_back(SensorFusionType::ODPM);
             } else if (values[j].asString().compare("CONSTANT") == 0) {
                 linked_sensors_type.emplace_back(SensorFusionType::CONSTANT);
+            } else if (values[j].asString().compare("CDEV") == 0) {
+                linked_sensors_type.emplace_back(SensorFusionType::CDEV);
             } else {
                 LOG(ERROR) << "Sensor[" << name << "] has invalid CombinationType settings "
                            << values[j].asString();
@@ -1376,6 +1380,12 @@ bool ParseSensorInfo(const Json::Value &config,
             LOG(INFO) << "Sensor[" << name << "]'s TempPath: " << temp_path;
         }
 
+        std::string severity_reference;
+        if (!sensors[i]["SeverityReference"].empty()) {
+            severity_reference = sensors[i]["SeverityReference"].asString();
+            LOG(INFO) << "Sensor[" << name << "]'s SeverityReference: " << temp_path;
+        }
+
         float vr_threshold = NAN;
         if (!sensors[i]["VrThreshold"].empty()) {
             vr_threshold = getFloatFromValue(sensors[i]["VrThreshold"]);
@@ -1468,6 +1478,7 @@ bool ParseSensorInfo(const Json::Value &config,
                 .hot_hysteresis = hot_hysteresis,
                 .cold_hysteresis = cold_hysteresis,
                 .temp_path = temp_path,
+                .severity_reference = severity_reference,
                 .vr_threshold = vr_threshold,
                 .multiplier = multiplier,
                 .polling_delay = polling_delay,

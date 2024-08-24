@@ -743,7 +743,7 @@ void Thermal::dumpThermalData(int fd, const char **args, uint32_t numArgs) {
             dump_buf << "getCurrentTemperatures:" << std::endl;
             Temperature temp_2_0;
             for (const auto &name_info_pair : map) {
-                thermal_helper_->readTemperature(name_info_pair.first, &temp_2_0, nullptr, true);
+                thermal_helper_->readTemperature(name_info_pair.first, &temp_2_0, true);
                 dump_buf << " Type: " << toString(temp_2_0.type)
                          << " Name: " << name_info_pair.first << " CurrentValue: " << temp_2_0.value
                          << " ThrottlingStatus: " << toString(temp_2_0.throttlingStatus)

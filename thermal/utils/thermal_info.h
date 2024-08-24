@@ -127,6 +127,7 @@ enum class SensorFusionType : uint32_t {
     SENSOR = 0,
     ODPM,
     CONSTANT,
+    CDEV,
 };
 
 std::ostream &operator<<(std::ostream &os, const SensorFusionType &sensor_fusion_type);
@@ -214,6 +215,7 @@ struct SensorInfo {
     ThrottlingArray hot_hysteresis;
     ThrottlingArray cold_hysteresis;
     std::string temp_path;
+    std::string severity_reference;
     float vr_threshold;
     float multiplier;
     std::chrono::milliseconds polling_delay;
