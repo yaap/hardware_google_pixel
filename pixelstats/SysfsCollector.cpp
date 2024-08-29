@@ -2127,6 +2127,7 @@ void SysfsCollector::logPerDay() {
     logBatteryEEPROM(stats_client);
     logBatteryHealth(stats_client);
     logBatteryTTF(stats_client);
+    logBatteryHistoryValidation();
     logBlockStatsReported(stats_client);
     logCodec1Failed(stats_client);
     logCodecFailed(stats_client);
@@ -2185,7 +2186,6 @@ void SysfsCollector::logBrownout() {
 
 void SysfsCollector::logOnce() {
     logBrownout();
-    logBatteryHistoryValidation();
 }
 
 void SysfsCollector::logPerHour() {

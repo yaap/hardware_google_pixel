@@ -72,9 +72,6 @@ void readLogbuffer(const std::string &buf_path, int num_fields, uint16_t code,
                    enum ReportEventFormat format, unsigned int last_check_time,
                    std::vector<std::vector<uint32_t>> &events);
 
-void readLogbuffer(const std::string &buf_path, int num_fields, const char *code,
-                   enum ReportEventFormat format, unsigned int last_check_time,
-                   std::vector<std::vector<uint32_t>> &events);
 }  // namespace pixel
 }  // namespace google
 }  // namespace hardware

@@ -238,22 +238,12 @@ void reportUsbDataSessionEvent(const std::shared_ptr<IStats> &stats_client,
 void readLogbuffer(const std::string &buf_path, int num_fields, uint16_t code,
                    enum ReportEventFormat format, unsigned int last_check_time,
                    std::vector<std::vector<uint32_t>> &events) {
-    char hex_str[16];
-
-    snprintf(hex_str, sizeof(hex_str), "0x%X", code);
-
-    return readLogbuffer(buf_path, num_fields, hex_str, format, last_check_time, events);
-}
-
-void readLogbuffer(const std::string &buf_path, int num_fields, const char *code,
-                   enum ReportEventFormat format, unsigned int last_check_time,
-                   std::vector<std::vector<uint32_t>> &events) {
     std::istringstream ss;
     std::string file_contents, line;
     int num, field_idx, pos, read;
     unsigned int ts, addr, val;
     unsigned int reported = 0;
-    char type[16];
+    uint16_t type;
     std::vector<uint32_t> vect(num_fields);
 
     if (!ReadFileToString(buf_path, &file_contents)) {
@@ -263,11 +253,11 @@ void readLogbuffer(const std::string &buf_path, int num_fields, const char *code
 
     ss.str(file_contents);
     while (getline(ss, line)) {
-        num = sscanf(line.c_str(), "[%u.%*u] %15s%n", &ts, type, &pos);
-        if (num != 2 || strncmp(type, code, strlen(code)))
+        num = sscanf(line.c_str(), "[%u.%*u] %hx%n", &ts, &type, &pos);
+        if (num != 2 || type != code)
             continue;
 
-        if (ts <= last_check_time) {
+        if (last_check_time != 0 && ts <= last_check_time) {
             reported++;
             continue;
         }
@@ -298,7 +288,7 @@ void readLogbuffer(const std::string &buf_path, int num_fields, const char *code
             events.push_back(vect);
     }
     if (events.size() > 0 || reported > 0)
-        ALOGD("%s: new:%zu, reported:%d", code, events.size(), reported);
+        ALOGD("0x%04X: new:%zu, reported:%d", code, events.size(), reported);
 
     return;
 }
