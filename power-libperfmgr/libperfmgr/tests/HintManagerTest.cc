@@ -10,7 +10,7 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specic language governing permissions and
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
@@ -82,9 +82,38 @@ constexpr char kJSON_RAW[] = R"(
             ],
             "Type": "Property",
             "ResetOnInit": true
+        },
+        {
+            "Name": "OTHER",
+            "Path": "<AdpfConfig>:OTHER",
+            "Values": [
+                "ADPF_DEFAULT"
+            ],
+            "Type": "Event"
+        },
+        {
+            "Name": "SURFACEFLINGER",
+            "Path": "<AdpfConfig>:SURFACEFLINGER",
+            "Values": [
+                "ADPF_DEFAULT",
+                "ADPF_SF"
+            ],
+            "Type": "Event"
         }
     ],
     "Actions": [
+        {
+        "PowerHint": "SF_PLAYING",
+        "Node": "SURFACEFLINGER",
+        "Duration": 0,
+        "Value": "ADPF_SF"
+        },
+        {
+        "PowerHint": "SF_RESET",
+        "Node": "SURFACEFLINGER",
+        "Duration": 0,
+        "Value": "ADPF_DEFAULT"
+        },
         {
             "PowerHint": "INTERACTION",
             "Node": "CPUCluster1MinFreq",
@@ -152,7 +181,7 @@ constexpr char kJSON_RAW[] = R"(
     "GpuSysfsPath" : "/sys/devices/platform/123.abc",
     "AdpfConfig": [
         {
-            "Name": "REFRESH_120FPS",
+            "Name": "ADPF_DEFAULT",
             "PID_On": true,
             "PID_Po": 5.0,
             "PID_Pu": 3.0,
@@ -172,12 +201,10 @@ constexpr char kJSON_RAW[] = R"(
             "UclampMin_High": 384,
             "UclampMin_Low": 0,
             "ReportingRateLimitNs": 166666660,
-            "EarlyBoost_On": false,
-            "EarlyBoost_TimeFactor": 0.8,
             "TargetTimeFactor": 1.0,
             "StaleTimeFactor": 10.0,
             "GpuBoost": true,
-            "GpuCapacityBoostMax": 300000,
+            "GpuCapacityBoostMax": 325000,
             "GpuCapacityLoadUpHeadroom": 1000,
             "HeuristicBoost_On": true,
             "HBoostModerateJankThreshold": 4,
@@ -191,7 +218,7 @@ constexpr char kJSON_RAW[] = R"(
             "MaxRecordsNum": 50
         },
         {
-            "Name": "REFRESH_60FPS",
+            "Name": "ADPF_SF",
             "PID_On": false,
             "PID_Po": 0,
             "PID_Pu": 0,
@@ -206,13 +233,39 @@ constexpr char kJSON_RAW[] = R"(
             "SamplingWindow_D": 0,
             "UclampMin_On": true,
             "UclampMin_Init": 200,
+            "UclampMin_LoadUp": 157,
+            "UclampMin_LoadReset": 157,
             "UclampMin_High": 157,
             "UclampMin_Low": 157,
             "ReportingRateLimitNs": 83333330,
-            "EarlyBoost_On": true,
-            "EarlyBoost_TimeFactor": 1.2,
             "TargetTimeFactor": 1.4,
             "StaleTimeFactor": 5.0
+        },
+        {
+            "Name": "SF_VIDEO_30FPS",
+            "PID_On": true,
+            "PID_Po": 5.0,
+            "PID_Pu": 3.0,
+            "PID_I": 0.001,
+            "PID_I_Init": 200,
+            "PID_I_High": 512,
+            "PID_I_Low": -120,
+            "PID_Do": 500.0,
+            "PID_Du": 300.0,
+            "SamplingWindow_P": 0,
+            "SamplingWindow_I": 0,
+            "SamplingWindow_D": 0,
+            "UclampMin_On": true,
+            "UclampMin_Init": 200,
+            "UclampMin_LoadUp": 157,
+            "UclampMin_LoadReset": 157,
+            "UclampMin_High": 480,
+            "UclampMin_Low": 240,
+            "ReportingRateLimitNs": 83333330,
+            "TargetTimeFactor": 1.4,
+            "StaleTimeFactor": 5.0,
+            "GpuBoost": false,
+            "GpuCapacityBoostMax": 32500
         }
     ]
 }
@@ -222,7 +275,7 @@ class HintManagerTest : public ::testing::Test, public HintManager {
   protected:
     HintManagerTest()
         : HintManager(nullptr, std::unordered_map<std::string, Hint>{},
-                      std::vector<std::shared_ptr<AdpfConfig>>(), {}) {
+                      std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_, {}) {
         android::base::SetMinimumLogSeverity(android::base::VERBOSE);
         prop_ = "vendor.pwhal.mode";
     }
@@ -271,6 +324,10 @@ class HintManagerTest : public ::testing::Test, public HintManager {
         json_doc_.replace(start_pos, from.length(), files_[1 + 2]->path);
         EXPECT_TRUE(android::base::SetProperty(prop_, ""))
             << "failed to clear property";
+
+        std::vector<std::shared_ptr<AdpfConfig>> adpfs = HintManager::ParseAdpfConfigs(json_doc_);
+        tag_adpfs_["OTHER"] = adpfs[0];
+        tag_adpfs_["SURFACEFLINGER"] = adpfs[1];
     }
 
     virtual void TearDown() {
@@ -278,6 +335,7 @@ class HintManagerTest : public ::testing::Test, public HintManager {
         nodes_.clear();
         files_.clear();
         nm_ = nullptr;
+        tag_adpfs_.clear();
     }
     sp<NodeLooperThread> nm_;
     std::unordered_map<std::string, Hint> actions_;
@@ -285,6 +343,7 @@ class HintManagerTest : public ::testing::Test, public HintManager {
     std::vector<std::unique_ptr<TemporaryFile>> files_;
     std::string json_doc_;
     std::string prop_;
+    std::unordered_map<std::string, std::shared_ptr<AdpfConfig>> tag_adpfs_;
 };
 
 static inline void _VerifyPropertyValue(const std::string& path,
@@ -309,7 +368,7 @@ static inline void _VerifyStats(const HintStats &stats, uint32_t count, uint64_t
 
 // Test GetHints
 TEST_F(HintManagerTest, GetHintsTest) {
-    HintManager hm(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), {});
+    HintManager hm(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_, {});
     EXPECT_TRUE(hm.Start());
     std::vector<std::string> hints = hm.GetHints();
     EXPECT_TRUE(hm.IsRunning());
@@ -322,7 +381,7 @@ TEST_F(HintManagerTest, GetHintsTest) {
 TEST_F(HintManagerTest, GetHintStatsTest) {
     auto hm =
             std::make_unique<HintManager>(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(),
-                                          std::optional<std::string>{});
+                                          tag_adpfs_, std::optional<std::string>{});
     EXPECT_TRUE(InitHintStatus(hm));
     EXPECT_TRUE(hm->Start());
     HintStats launch_stats(hm->GetHintStats("LAUNCH"));
@@ -335,7 +394,7 @@ TEST_F(HintManagerTest, GetHintStatsTest) {
 
 // Test initialization of default values
 TEST_F(HintManagerTest, HintInitDefaultTest) {
-    HintManager hm(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), {});
+    HintManager hm(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_, {});
     EXPECT_TRUE(hm.Start());
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
     EXPECT_TRUE(hm.IsRunning());
@@ -346,7 +405,7 @@ TEST_F(HintManagerTest, HintInitDefaultTest) {
 
 // Test IsHintSupported
 TEST_F(HintManagerTest, HintSupportedTest) {
-    HintManager hm(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), {});
+    HintManager hm(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_, {});
     EXPECT_TRUE(hm.IsHintSupported("INTERACTION"));
     EXPECT_TRUE(hm.IsHintSupported("LAUNCH"));
     EXPECT_FALSE(hm.IsHintSupported("NO_SUCH_HINT"));
@@ -356,7 +415,7 @@ TEST_F(HintManagerTest, HintSupportedTest) {
 TEST_F(HintManagerTest, HintTest) {
     auto hm =
             std::make_unique<HintManager>(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(),
-                                          std::optional<std::string>{});
+                                          tag_adpfs_, std::optional<std::string>{});
     EXPECT_TRUE(InitHintStatus(hm));
     EXPECT_TRUE(hm->Start());
     EXPECT_TRUE(hm->IsRunning());
@@ -407,7 +466,7 @@ TEST_F(HintManagerTest, HintTest) {
 TEST_F(HintManagerTest, HintStatsTest) {
     auto hm =
             std::make_unique<HintManager>(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(),
-                                          std::optional<std::string>{});
+                                          tag_adpfs_, std::optional<std::string>{});
     EXPECT_TRUE(InitHintStatus(hm));
     EXPECT_TRUE(hm->Start());
     EXPECT_TRUE(hm->IsRunning());
@@ -449,9 +508,8 @@ TEST_F(HintManagerTest, HintStatsTest) {
 
 // Test parsing nodes
 TEST_F(HintManagerTest, ParseNodesTest) {
-    std::vector<std::unique_ptr<Node>> nodes =
-        HintManager::ParseNodes(json_doc_);
-    EXPECT_EQ(4u, nodes.size());
+    std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes(json_doc_);
+    EXPECT_EQ(6u, nodes.size());
     EXPECT_EQ("CPUCluster0MinFreq", nodes[0]->GetName());
     EXPECT_EQ("CPUCluster1MinFreq", nodes[1]->GetName());
     EXPECT_EQ(files_[0 + 2]->path, nodes[0]->GetPath());
@@ -483,8 +541,7 @@ TEST_F(HintManagerTest, ParseNodesDuplicateNameTest) {
     std::string from = "CPUCluster0MinFreq";
     size_t start_pos = json_doc_.find(from);
     json_doc_.replace(start_pos, from.length(), "CPUCluster1MinFreq");
-    std::vector<std::unique_ptr<Node>> nodes =
-        HintManager::ParseNodes(json_doc_);
+    std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes(json_doc_);
     EXPECT_EQ(0u, nodes.size());
 }
 
@@ -492,8 +549,7 @@ TEST_F(HintManagerTest, ParsePropertyNodesDuplicatNameTest) {
     std::string from = "ModeProperty";
     size_t start_pos = json_doc_.find(from);
     json_doc_.replace(start_pos, from.length(), "CPUCluster1MinFreq");
-    std::vector<std::unique_ptr<Node>> nodes =
-        HintManager::ParseNodes(json_doc_);
+    std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes(json_doc_);
     EXPECT_EQ(0u, nodes.size());
 }
 
@@ -502,8 +558,7 @@ TEST_F(HintManagerTest, ParseNodesDuplicatePathTest) {
     std::string from = files_[0 + 2]->path;
     size_t start_pos = json_doc_.find(from);
     json_doc_.replace(start_pos, from.length(), files_[1 + 2]->path);
-    std::vector<std::unique_ptr<Node>> nodes =
-        HintManager::ParseNodes(json_doc_);
+    std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes(json_doc_);
     EXPECT_EQ(0u, nodes.size());
 }
 
@@ -512,8 +567,7 @@ TEST_F(HintManagerTest, ParseFileNodesDuplicateValueTest) {
     std::string from = "1512000";
     size_t start_pos = json_doc_.find(from);
     json_doc_.replace(start_pos, from.length(), "1134000");
-    std::vector<std::unique_ptr<Node>> nodes =
-        HintManager::ParseNodes(json_doc_);
+    std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes(json_doc_);
     EXPECT_EQ(0u, nodes.size());
 }
 
@@ -522,8 +576,7 @@ TEST_F(HintManagerTest, ParsePropertyNodesDuplicateValueTest) {
     std::string from = "HIGH";
     size_t start_pos = json_doc_.find(from);
     json_doc_.replace(start_pos, from.length(), "LOW");
-    std::vector<std::unique_ptr<Node>> nodes =
-        HintManager::ParseNodes(json_doc_);
+    std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes(json_doc_);
     EXPECT_EQ(0u, nodes.size());
 }
 
@@ -532,8 +585,7 @@ TEST_F(HintManagerTest, ParseFileNodesEmptyValueTest) {
     std::string from = "384000";
     size_t start_pos = json_doc_.find(from);
     json_doc_.replace(start_pos, from.length(), "");
-    std::vector<std::unique_ptr<Node>> nodes =
-        HintManager::ParseNodes(json_doc_);
+    std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes(json_doc_);
     EXPECT_EQ(0u, nodes.size());
 }
 
@@ -542,9 +594,8 @@ TEST_F(HintManagerTest, ParsePropertyNodesEmptyValueTest) {
     std::string from = "LOW";
     size_t start_pos = json_doc_.find(from);
     json_doc_.replace(start_pos, from.length(), "");
-    std::vector<std::unique_ptr<Node>> nodes =
-        HintManager::ParseNodes(json_doc_);
-    EXPECT_EQ(4u, nodes.size());
+    std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes(json_doc_);
+    EXPECT_EQ(6u, nodes.size());
     EXPECT_EQ("CPUCluster0MinFreq", nodes[0]->GetName());
     EXPECT_EQ("CPUCluster1MinFreq", nodes[1]->GetName());
     EXPECT_EQ(files_[0 + 2]->path, nodes[0]->GetPath());
@@ -573,8 +624,7 @@ TEST_F(HintManagerTest, ParsePropertyNodesEmptyValueTest) {
 
 // Test parsing invalid json for nodes
 TEST_F(HintManagerTest, ParseBadFileNodesTest) {
-    std::vector<std::unique_ptr<Node>> nodes =
-        HintManager::ParseNodes("invalid json");
+    std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes("invalid json");
     EXPECT_EQ(0u, nodes.size());
     nodes = HintManager::ParseNodes(
         "{\"devices\":{\"15\":[\"armeabi-v7a\"],\"16\":[\"armeabi-v7a\"],"
@@ -584,10 +634,9 @@ TEST_F(HintManagerTest, ParseBadFileNodesTest) {
 
 // Test parsing actions
 TEST_F(HintManagerTest, ParseActionsTest) {
-    std::vector<std::unique_ptr<Node>> nodes =
-        HintManager::ParseNodes(json_doc_);
+    std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes(json_doc_);
     std::unordered_map<std::string, Hint> actions = HintManager::ParseActions(json_doc_, nodes);
-    EXPECT_EQ(7u, actions.size());
+    EXPECT_EQ(9u, actions.size());
 
     EXPECT_EQ(2u, actions["INTERACTION"].node_actions.size());
     EXPECT_EQ(1u, actions["INTERACTION"].node_actions[0].node_index);
@@ -644,9 +693,8 @@ TEST_F(HintManagerTest, ParseActionDuplicateFileNodeTest) {
     std::string from = R"("Node": "CPUCluster0MinFreq")";
     size_t start_pos = json_doc_.find(from);
     json_doc_.replace(start_pos, from.length(), R"("Node": "CPUCluster1MinFreq")");
-    std::vector<std::unique_ptr<Node>> nodes =
-        HintManager::ParseNodes(json_doc_);
-    EXPECT_EQ(4u, nodes.size());
+    std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes(json_doc_);
+    EXPECT_EQ(6u, nodes.size());
     auto actions = HintManager::ParseActions(json_doc_, nodes);
     EXPECT_EQ(0u, actions.size());
 }
@@ -657,15 +705,14 @@ TEST_F(HintManagerTest, ParseActionDuplicatePropertyNodeTest) {
     size_t start_pos = json_doc_.find(from);
     json_doc_.replace(start_pos, from.length(), R"("Node": "ModeProperty")");
     auto nodes = HintManager::ParseNodes(json_doc_);
-    EXPECT_EQ(4u, nodes.size());
+    EXPECT_EQ(6u, nodes.size());
     auto actions = HintManager::ParseActions(json_doc_, nodes);
     EXPECT_EQ(0u, actions.size());
 }
 
 // Test parsing invalid json for actions
 TEST_F(HintManagerTest, ParseBadActionsTest) {
-    std::vector<std::unique_ptr<Node>> nodes =
-        HintManager::ParseNodes(json_doc_);
+    std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes(json_doc_);
     auto actions = HintManager::ParseActions("invalid json", nodes);
     EXPECT_EQ(0u, actions.size());
     actions = HintManager::ParseActions(
@@ -788,9 +835,9 @@ TEST_F(HintManagerTest, GetFromJSONTest) {
 // Test parsing AdpfConfig
 TEST_F(HintManagerTest, ParseAdpfConfigsTest) {
     std::vector<std::shared_ptr<AdpfConfig>> adpfs = HintManager::ParseAdpfConfigs(json_doc_);
-    EXPECT_EQ(2u, adpfs.size());
-    EXPECT_EQ("REFRESH_120FPS", adpfs[0]->mName);
-    EXPECT_EQ("REFRESH_60FPS", adpfs[1]->mName);
+    EXPECT_EQ(3u, adpfs.size());
+    EXPECT_EQ("ADPF_DEFAULT", adpfs[0]->mName);
+    EXPECT_EQ("ADPF_SF", adpfs[1]->mName);
     EXPECT_TRUE(adpfs[0]->mPidOn);
     EXPECT_FALSE(adpfs[1]->mPidOn);
     EXPECT_EQ(5.0, adpfs[0]->mPidPo);
@@ -859,9 +906,11 @@ TEST_F(HintManagerTest, ParseAdpfConfigsTest) {
 
 // Test parsing adpf configs with duplicate name
 TEST_F(HintManagerTest, ParseAdpfConfigsDuplicateNameTest) {
-    std::string from = "REFRESH_120FPS";
+    std::string from = "\"Name\": \"ADPF_DEFAULT\"";
+    LOG(INFO) << "Jimmy Before ADPF_DEFAULT:\n" << json_doc_;
     size_t start_pos = json_doc_.find(from);
-    json_doc_.replace(start_pos, from.length(), "REFRESH_60FPS");
+    json_doc_.replace(start_pos, from.length(), "\"Name\": \"ADPF_SF\"");
+    LOG(INFO) << "Jimmy After ADPF_DEFAULT:\n" << json_doc_;
     std::vector<std::shared_ptr<AdpfConfig>> adpfs = HintManager::ParseAdpfConfigs(json_doc_);
     EXPECT_EQ(0u, adpfs.size());
 }
@@ -894,14 +943,17 @@ TEST_F(HintManagerTest, GetFromJSONAdpfConfigTest) {
     EXPECT_TRUE(hm->IsRunning());
 
     // Get default Adpf Profile
-    EXPECT_EQ("REFRESH_120FPS", hm->GetAdpfProfile()->mName);
+    EXPECT_EQ("ADPF_DEFAULT", hm->GetAdpfProfile()->mName);
+    EXPECT_EQ("ADPF_SF", hm->GetAdpfProfile("SURFACEFLINGER")->mName);
 
     // Set specific Adpf Profile
-    EXPECT_FALSE(hm->SetAdpfProfile("NoSuchProfile"));
-    EXPECT_TRUE(hm->SetAdpfProfile("REFRESH_60FPS"));
-    EXPECT_EQ("REFRESH_60FPS", hm->GetAdpfProfile()->mName);
-    EXPECT_TRUE(hm->SetAdpfProfile("REFRESH_120FPS"));
-    EXPECT_EQ("REFRESH_120FPS", hm->GetAdpfProfile()->mName);
+    EXPECT_FALSE(hm->SetAdpfProfile("OTHER", "NoSuchProfile"));
+    // Test SF_PLAYING
+    EXPECT_TRUE(hm->SetAdpfProfile("SURFACEFLINGER", "SF_VIDEO_30FPS"));
+    EXPECT_EQ("SF_VIDEO_30FPS", hm->GetAdpfProfile("SURFACEFLINGER")->mName);
+    // Test SF_RESET
+    EXPECT_TRUE(hm->SetAdpfProfile("SURFACEFLINGER", "ADPF_SF"));
+    EXPECT_EQ("ADPF_SF", hm->GetAdpfProfile("SURFACEFLINGER")->mName);
 }
 
 TEST_F(HintManagerTest, IsAdpfProfileSupported) {
@@ -912,8 +964,8 @@ TEST_F(HintManagerTest, IsAdpfProfileSupported) {
 
     // Check if given AdpfProfile supported
     EXPECT_FALSE(hm->IsAdpfProfileSupported("NoSuchProfile"));
-    EXPECT_TRUE(hm->IsAdpfProfileSupported("REFRESH_60FPS"));
-    EXPECT_TRUE(hm->IsAdpfProfileSupported("REFRESH_120FPS"));
+    EXPECT_TRUE(hm->IsAdpfProfileSupported("ADPF_DEFAULT"));
+    EXPECT_TRUE(hm->IsAdpfProfileSupported("ADPF_SF"));
 }
 
 TEST_F(HintManagerTest, GpuConfigSupport) {
@@ -923,13 +975,13 @@ TEST_F(HintManagerTest, GpuConfigSupport) {
     ASSERT_TRUE(hm);
 
     EXPECT_THAT(hm->gpu_sysfs_config_path(), Optional(Eq("/sys/devices/platform/123.abc")));
-    ASSERT_TRUE(hm->SetAdpfProfile("REFRESH_120FPS"));
+    ASSERT_FALSE(hm->SetAdpfProfile("OTHER", "ADPF_DEFAULT"));
     auto profile = hm->GetAdpfProfile();
     EXPECT_THAT(profile->mGpuBoostOn, Optional(true));
-    EXPECT_THAT(profile->mGpuBoostCapacityMax, Optional(300000));
+    EXPECT_THAT(profile->mGpuBoostCapacityMax, Optional(325000));
     EXPECT_EQ(profile->mGpuCapacityLoadUpHeadroom, 1000);
 
-    ASSERT_TRUE(hm->SetAdpfProfile("REFRESH_60FPS"));
+    ASSERT_TRUE(hm->SetAdpfProfile("OTHER", "ADPF_SF"));
     profile = hm->GetAdpfProfile();
     EXPECT_FALSE(profile->mGpuBoostOn);
     EXPECT_FALSE(profile->mGpuBoostCapacityMax);

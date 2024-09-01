@@ -59,6 +59,7 @@ cc_library {
         "NodeLooperThread.cc",
         "HintManager.cc",
         "AdpfConfig.cc",
+        "EventNode.cc",
     ]
 }
 
@@ -72,6 +73,7 @@ cc_test {
         "tests/PropertyNodeTest.cc",
         "tests/NodeLooperThreadTest.cc",
         "tests/HintManagerTest.cc",
+        "tests/EventNodeTest.cc",
     ],
     test_suites: ["device-tests"],
     require_root: true,
