@@ -52,7 +52,9 @@ std::chrono::milliseconds PropertyNode::Update(bool) {
         const std::string& req_value =
             req_sorted_[value_index].GetRequestValue();
         if (ATRACE_ENABLED()) {
-            const std::string tag = GetName() + ":" + req_value;
+            ATRACE_INT(("N:" + GetName()).c_str(), value_index);
+            const std::string tag =
+                    GetName() + ":" + req_value + ":" + std::to_string(expire_time.count());
             ATRACE_BEGIN(tag.c_str());
         }
         if (!android::base::SetProperty(node_path_, req_value)) {
