@@ -941,9 +941,6 @@ std::shared_ptr<AdpfConfig> HintManager::GetAdpfProfile(const std::string &tag) 
     if (adpfs_.empty())
         return nullptr;
     if (tag_profile_map_.find(tag) == tag_profile_map_.end()) {
-        // If no profile was set for this tag, use 1st ADPF profile.
-        LOG(VERBOSE) << "GetAdpfProfile('" << tag << "') not found, use first profile: '"
-                     << GetAdpfProfileFromDoHint()->mName << "'";
         // TODO(jimmyshiu@): `return adpfs_[0]` once the GetAdpfProfileFromDoHint() retired.
         return GetAdpfProfileFromDoHint();
     }
