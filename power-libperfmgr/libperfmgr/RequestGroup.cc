@@ -47,8 +47,12 @@ const std::string& RequestGroup::GetRequestValue() const {
 }
 
 bool RequestGroup::GetExpireTime(std::chrono::milliseconds* expire_time) {
-    ReqTime now = std::chrono::steady_clock::now();
+
     *expire_time = std::chrono::milliseconds::max();
+
+    if (request_map_.empty()) return false;
+
+    ReqTime now = std::chrono::steady_clock::now();
 
     bool active = false;
     for (auto it = request_map_.begin(); it != request_map_.end();) {
