@@ -1398,6 +1398,12 @@ message VendorAudioHardwareStatsReported {
 
   /* version: version of the data. */
   optional int32 version = 9;
+
+  /* duration: duration in second of the voice/voip call. */
+  optional int32 duration_second = 10;
+
+  /* band: band value. */
+  optional int32 band = 11;
 }
 
 /**
