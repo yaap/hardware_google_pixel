@@ -13,9 +13,6 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     fastbootd
 
-# Common ramdump file type.
-BOARD_VENDOR_SEPOLICY_DIRS += hardware/google/pixel-sepolicy/ramdump/common
-
 # Enable RKP support
 PRODUCT_PRODUCT_PROPERTIES += \
     remote_provisioning.hostname=remoteprovisioning.googleapis.com
@@ -55,10 +52,12 @@ PRODUCT_PROPERTY_OVERRIDES += \
     dalvik.vm.systemuicompilerfilter=speed
 
 # Virtual fingerprint HAL
-PRODUCT_PACKAGES_DEBUG += com.android.hardware.biometrics.fingerprint.virtual
+PRODUCT_PACKAGES += com.android.hardware.biometrics.fingerprint.virtual
 
 # Virtual face HAL
-ifeq ($(RELEASE_AIDL_USE_UNFROZEN), true)
-PRODUCT_PACKAGES_DEBUG += com.android.hardware.biometrics.face.virtual
-endif
+PRODUCT_PACKAGES += com.android.hardware.biometrics.face.virtual
 
+# AI Labs artifacts
+ifeq ($(RELEASE_INSTALL_AI_LABS_ARTIFACTS), true)
+  include vendor/google/AILabs/ai_labs.mk
+endif

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "aidl/UClampVoter.h"
@@ -28,6 +29,8 @@ namespace pixel {
 using std::literals::chrono_literals::operator""s;
 using std::literals::chrono_literals::operator""ms;
 using std::literals::chrono_literals::operator""ns;
+
+using testing::Optional;
 
 TEST(VoteRange, active) {
     auto tNow = std::chrono::steady_clock::now();
@@ -85,7 +88,7 @@ TEST(VoteRange, getUclampRange) {
               CpuVote(voteFirst.active(), voteFirst.startTime(), voteFirst.durationNs(), 11, 1024));
     UclampRange ur;
 
-    votes.getUclampRange(&ur, tNext);
+    votes.getUclampRange(ur, tNext);
     EXPECT_EQ(11, ur.uclampMin);
     EXPECT_EQ(kUclampMax, ur.uclampMax);
 }
@@ -103,17 +106,17 @@ TEST(UclampVoter, simple) {
     EXPECT_EQ(2, votes->size());
 
     UclampRange ur1;
-    votes->getUclampRange(&ur1, tNow);
+    votes->getUclampRange(ur1, tNow);
     EXPECT_EQ(22, ur1.uclampMin);
     EXPECT_EQ(kUclampMax, ur1.uclampMax);
 
     UclampRange ur2;
-    votes->getUclampRange(&ur2, tNow + 2s);
+    votes->getUclampRange(ur2, tNow + 2s);
     EXPECT_EQ(11, ur2.uclampMin);
     EXPECT_EQ(kUclampMax, ur2.uclampMax);
 
     UclampRange ur3;
-    votes->getUclampRange(&ur3, tNow + 5s);
+    votes->getUclampRange(ur3, tNow + 5s);
     EXPECT_EQ(0, ur3.uclampMin);
     EXPECT_EQ(1024, ur3.uclampMax);
 
@@ -140,12 +143,12 @@ TEST(UclampVoter, overwrite) {
     EXPECT_EQ(2, votes->size());
 
     UclampRange ucr1;
-    votes->getUclampRange(&ucr1, tNow + 1s);
+    votes->getUclampRange(ucr1, tNow + 1s);
     EXPECT_EQ(22, ucr1.uclampMin);
 
     votes->add(1, CpuVote(true, tNow, 5s, 32, 1024));
     UclampRange ucr2;
-    votes->getUclampRange(&ucr2, tNow + 1s);
+    votes->getUclampRange(ucr2, tNow + 1s);
     EXPECT_EQ(32, ucr2.uclampMin);
 }
 
@@ -178,7 +181,7 @@ TEST(UclampVoter, loadVoteTest) {
 
     // Default: min = 50 (original)
     votes->add(defaultVoteId, CpuVote(true, tNow, 400ms, uclampMinDefault, 1024));
-    votes->getUclampRange(&ucr, tNow + 100ms);
+    votes->getUclampRange(ucr, tNow + 100ms);
     EXPECT_EQ(uclampMinDefault, ucr.uclampMin);
 
     // Default: min = UclampMinInit
@@ -188,21 +191,21 @@ TEST(UclampVoter, loadVoteTest) {
 
     // Check that load is enabled
     ucr.uclampMin = 0;
-    votes->getUclampRange(&ucr, tNow + 100ns);
+    votes->getUclampRange(ucr, tNow + 100ns);
     EXPECT_EQ(uclampMinHigh, ucr.uclampMin);
 
     // Timeout or restore after 1st frame
     // Expect to get 162.
     ucr.uclampMin = 0;
-    votes->getUclampRange(&ucr, tNow + 350ns);
+    votes->getUclampRange(ucr, tNow + 350ns);
     EXPECT_EQ(uclampMinInit, ucr.uclampMin);
 }
 
 TEST(GpuCapacityVoter, testIncorrectTyping) {
     const auto now = std::chrono::steady_clock::now();
     Votes votes;
-    static constexpr int gpu_vote_id = static_cast<int>(AdpfHintType::ADPF_GPU_CAPACITY);
-    static constexpr int cpu_vote_id = static_cast<int>(AdpfHintType::ADPF_CPU_LOAD_UP);
+    static constexpr int gpu_vote_id = static_cast<int>(AdpfVoteType::GPU_CAPACITY);
+    static constexpr int cpu_vote_id = static_cast<int>(AdpfVoteType::CPU_LOAD_UP);
 
     votes.add(cpu_vote_id, GpuVote(true, now, 250ns, Cycles(1024)));
     EXPECT_FALSE(votes.voteIsActive(cpu_vote_id));
@@ -215,7 +218,7 @@ TEST(GpuCapacityVoter, testIncorrectTyping) {
     EXPECT_FALSE(votes.remove(cpu_vote_id));
 
     UclampRange range;
-    votes.getUclampRange(&range, now);
+    votes.getUclampRange(range, now);
     EXPECT_EQ(range.uclampMin, 0);
     EXPECT_EQ(range.uclampMax, 1024);
 
@@ -225,8 +228,8 @@ TEST(GpuCapacityVoter, testIncorrectTyping) {
 TEST(GpuCapacityVoter, testGpuUseVote) {
     const auto now = std::chrono::steady_clock::now();
     Votes votes;
-    static constexpr int gpu_vote_id1 = static_cast<int>(AdpfHintType::ADPF_GPU_CAPACITY);
-    static constexpr int gpu_vote_id2 = static_cast<int>(AdpfHintType::ADPF_GPU_LOAD_UP);
+    static constexpr int gpu_vote_id1 = static_cast<int>(AdpfVoteType::GPU_CAPACITY);
+    static constexpr int gpu_vote_id2 = static_cast<int>(AdpfVoteType::GPU_LOAD_UP);
 
     votes.add(gpu_vote_id1, GpuVote(true, now, 250ns, Cycles(1024)));
     EXPECT_TRUE(votes.setUseVote(gpu_vote_id1, true));
@@ -236,7 +239,7 @@ TEST(GpuCapacityVoter, testGpuUseVote) {
 TEST(GpuCapacityVoter, testBasicVoteActivation) {
     auto const now = std::chrono::steady_clock::now();
     auto const timeout = 1s;
-    auto const gpu_vote_id = static_cast<int>(AdpfHintType::ADPF_GPU_CAPACITY);
+    auto const gpu_vote_id = static_cast<int>(AdpfVoteType::GPU_CAPACITY);
     Votes votes;
 
     votes.add(gpu_vote_id, GpuVote(true, now, 250ns, Cycles(100)));
@@ -256,15 +259,13 @@ TEST(GpuCapacityVoter, testBasicVoteActivation) {
 TEST(GpuCapacityVoter, testBasicVoteTimeouts) {
     auto const now = std::chrono::steady_clock::now();
     auto const timeout = 1s;
-    auto const gpu_vote_id = static_cast<int>(AdpfHintType::ADPF_GPU_CAPACITY);
+    auto const gpu_vote_id = static_cast<int>(AdpfVoteType::GPU_CAPACITY);
     Cycles const cycles(100);
 
     Votes votes;
     votes.add(gpu_vote_id, GpuVote(true, now, timeout, cycles));
 
-    auto capacity = votes.getGpuCapacityRequest(now + 1ns);
-    ASSERT_TRUE(capacity);
-    EXPECT_EQ(*capacity, cycles);
+    EXPECT_THAT(votes.getGpuCapacityRequest(now + 1ns), Optional(Cycles(100)));
 
     auto capacity2 = votes.getGpuCapacityRequest(now + 2 * timeout);
     EXPECT_FALSE(capacity2);
@@ -274,8 +275,8 @@ TEST(GpuCapacityVoter, testVoteTimeouts) {
     auto const now = std::chrono::steady_clock::now();
     auto const timeout = 1s;
     auto const timeout2 = 10s;
-    auto const gpu_vote_id = static_cast<int>(AdpfHintType::ADPF_GPU_CAPACITY);
-    auto const cpu_vote_id = static_cast<int>(AdpfHintType::ADPF_CPU_LOAD_UP);
+    auto const gpu_vote_id = static_cast<int>(AdpfVoteType::GPU_CAPACITY);
+    auto const cpu_vote_id = static_cast<int>(AdpfVoteType::CPU_LOAD_UP);
     Cycles const cycles(100);
 
     Votes votes;
@@ -296,22 +297,45 @@ TEST(GpuCapacityVoter, testVoteTimeouts) {
 TEST(GpuCapacityVoter, testGpuVoteActive) {
     auto const now = std::chrono::steady_clock::now();
     auto const timeout = 1s;
-    auto const gpu_vote_id = static_cast<int>(AdpfHintType::ADPF_GPU_CAPACITY);
+    auto const gpu_vote_id = static_cast<int>(AdpfVoteType::GPU_CAPACITY);
     Cycles const cycles(100);
 
     Votes votes;
     votes.add(gpu_vote_id, GpuVote(true, now, timeout, cycles));
 
     EXPECT_TRUE(votes.voteIsActive(gpu_vote_id));
-    auto const gpu_capacity_request = votes.getGpuCapacityRequest(now);
-    ASSERT_TRUE(gpu_capacity_request);
-    EXPECT_EQ(*gpu_capacity_request, cycles);
+    EXPECT_THAT(votes.getGpuCapacityRequest(now), Optional(cycles));
     EXPECT_TRUE(votes.setUseVote(gpu_vote_id, false));
     ASSERT_FALSE(votes.getGpuCapacityRequest(now));
 
     EXPECT_FALSE(votes.voteIsActive(gpu_vote_id));
 
     EXPECT_EQ(votes.size(), 1);
+}
+
+TEST(GpuCapacityVoter, testGpuVoteSum) {
+    auto const now = std::chrono::steady_clock::now();
+
+    auto const capacity_vote_id = static_cast<int>(AdpfVoteType::GPU_CAPACITY);
+    auto const load_vote_id = static_cast<int>(AdpfVoteType::GPU_LOAD_UP);
+
+    Votes votes;
+    votes.add(capacity_vote_id, GpuVote(true, now, 100ms, Cycles(321)));
+    votes.add(load_vote_id, GpuVote(true, now, 50ms, Cycles(123)));
+
+    EXPECT_TRUE(votes.voteIsActive(capacity_vote_id));
+    EXPECT_TRUE(votes.voteIsActive(load_vote_id));
+
+    EXPECT_THAT(votes.getGpuCapacityRequest(now + 1ms), Optional(Cycles(444)));
+    EXPECT_THAT(votes.getGpuCapacityRequest(now + 51ms), Optional(Cycles(321)));
+    EXPECT_FALSE(votes.getGpuCapacityRequest(now + 101ms));
+
+    EXPECT_TRUE(votes.setUseVote(load_vote_id, false));
+    EXPECT_TRUE(votes.voteIsActive(capacity_vote_id));
+    EXPECT_FALSE(votes.voteIsActive(load_vote_id));
+    EXPECT_THAT(votes.getGpuCapacityRequest(now + 1ms), Optional(Cycles(321)));
+
+    EXPECT_EQ(votes.size(), 2);
 }
 }  // namespace pixel
 }  // namespace impl

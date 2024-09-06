@@ -76,6 +76,7 @@ cc_library_static {
         "CommonUtils.cpp",
         "MonitorFfs.cpp",
         "I2cHelper.cpp",
+        "UsbBusHelper.cpp",
     ],
 
     cflags: [
@@ -101,6 +102,27 @@ cc_library_static {
 
     static_libs: [
         "libthermalutils",
+    ],
+}
+
+cc_library_static {
+    name: "libpixelusb-usbdp",
+    vendor: true,
+
+    srcs: [
+        "UsbDpUtils.cpp",
+    ],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+
+    shared_libs: [
+        "libbase",
+        "libcutils",
+        "libutils",
+        "android.hardware.usb-V3-ndk",
     ],
 }
 

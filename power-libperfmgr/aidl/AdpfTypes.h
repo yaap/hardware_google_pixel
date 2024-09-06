@@ -16,35 +16,85 @@
 
 #pragma once
 
+#include <aidl/android/hardware/power/Boost.h>
+#include <aidl/android/hardware/power/ChannelConfig.h>
+#include <aidl/android/hardware/power/ChannelMessage.h>
+#include <aidl/android/hardware/power/IPower.h>
+#include <aidl/android/hardware/power/IPowerHintSession.h>
+#include <aidl/android/hardware/power/Mode.h>
+#include <aidl/android/hardware/power/SessionConfig.h>
+#include <aidl/android/hardware/power/SessionTag.h>
+#include <aidl/android/hardware/power/WorkDuration.h>
+#include <android-base/thread_annotations.h>
+#include <fmq/AidlMessageQueue.h>
+#include <fmq/EventFlag.h>
+
 #include <cstdint>
 
-namespace aidl {
-namespace google {
-namespace hardware {
-namespace power {
-namespace impl {
-namespace pixel {
+namespace aidl::google::hardware::power::impl::pixel {
+
+using namespace android::hardware::power;
+
+using ::android::AidlMessageQueue;
+using ::android::hardware::EventFlag;
+using android::hardware::common::fmq::MQDescriptor;
+using android::hardware::common::fmq::SynchronizedReadWrite;
+
+using ChannelQueueDesc = MQDescriptor<ChannelMessage, SynchronizedReadWrite>;
+using ChannelQueue = AidlMessageQueue<ChannelMessage, SynchronizedReadWrite>;
+using FlagQueueDesc = MQDescriptor<int8_t, SynchronizedReadWrite>;
+using FlagQueue = AidlMessageQueue<int8_t, SynchronizedReadWrite>;
 
 enum class AdpfErrorCode : int32_t { ERR_OK = 0, ERR_BAD_STATE = -1, ERR_BAD_ARG = -2 };
 
-enum class AdpfHintType : int32_t {
-    ADPF_VOTE_DEFAULT = 1,
-    ADPF_CPU_LOAD_UP = 2,
-    ADPF_CPU_LOAD_RESET = 3,
-    ADPF_CPU_LOAD_RESUME = 4,
-    ADPF_VOTE_POWER_EFFICIENCY = 5,
-    ADPF_GPU_LOAD_UP = 6,
-    ADPF_GPU_LOAD_DOWN = 7,
-    ADPF_GPU_LOAD_RESET = 8,
-    ADPF_GPU_CAPACITY = 9,
+enum class AdpfVoteType : int32_t {
+    CPU_VOTE_DEFAULT = 0,
+    CPU_LOAD_UP,
+    CPU_LOAD_RESET,
+    CPU_LOAD_RESUME,
+    VOTE_POWER_EFFICIENCY,
+    GPU_LOAD_UP,
+    GPU_LOAD_DOWN,
+    GPU_LOAD_RESET,
+    GPU_CAPACITY,
+    VOTE_TYPE_SIZE
+};
+
+constexpr const char *AdpfVoteTypeToStr(AdpfVoteType voteType) {
+    switch (voteType) {
+        case AdpfVoteType::CPU_VOTE_DEFAULT:
+            return "CPU_VOTE_DEFAULT";
+        case AdpfVoteType::CPU_LOAD_UP:
+            return "CPU_LOAD_UP";
+        case AdpfVoteType::CPU_LOAD_RESET:
+            return "CPU_LOAD_RESET";
+        case AdpfVoteType::CPU_LOAD_RESUME:
+            return "CPU_LOAD_RESUME";
+        case AdpfVoteType::VOTE_POWER_EFFICIENCY:
+            return "VOTE_POWER_EFFICIENCY";
+        case AdpfVoteType::GPU_LOAD_UP:
+            return "GPU_LOAD_UP";
+        case AdpfVoteType::GPU_LOAD_DOWN:
+            return "GPU_LOAD_DOWN";
+        case AdpfVoteType::GPU_LOAD_RESET:
+            return "GPU_LOAD_RESET";
+        case AdpfVoteType::GPU_CAPACITY:
+            return "GPU_CAPACITY";
+        default:
+            return "INVALID_VOTE";
+    }
+}
+
+class Immobile {
+  public:
+    Immobile() {}
+    Immobile(const Immobile &) = delete;
+    Immobile(Immobile &&) = delete;
+    Immobile &operator=(const Immobile &) = delete;
+    Immobile &operator=(Immobile &) = delete;
 };
 
 constexpr int kUclampMin{0};
 constexpr int kUclampMax{1024};
 
-}  // namespace pixel
-}  // namespace impl
-}  // namespace power
-}  // namespace hardware
-}  // namespace google
-}  // namespace aidl
+}  // namespace aidl::google::hardware::power::impl::pixel

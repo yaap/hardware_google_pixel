@@ -18,14 +18,14 @@
 
 #include <android-base/properties.h>
 #include <perfmgr/HintManager.h>
-#include <utils/Looper.h>
+#include <utils/Mutex.h>
 
 #include <mutex>
 #include <optional>
-#include <unordered_set>
 
+#include "AppHintDesc.h"
 #include "BackgroundWorker.h"
-#include "PowerHintSession.h"
+#include "GpuCapacityNode.h"
 #include "SessionTaskMap.h"
 
 namespace aidl {
@@ -35,15 +35,15 @@ namespace power {
 namespace impl {
 namespace pixel {
 
-using ::android::Looper;
-using ::android::Message;
 using ::android::Thread;
-using ::android::perfmgr::HintManager;
 
 constexpr char kPowerHalAdpfDisableTopAppBoost[] = "vendor.powerhal.adpf.disable.hint";
 
-class PowerSessionManager : public ::android::RefBase {
+template <class HintManagerT = ::android::perfmgr::HintManager>
+class PowerSessionManager : public Immobile {
   public:
+    ~PowerSessionManager() = default;
+
     // Update the current hint info
     void updateHintMode(const std::string &mode, bool enabled);
     void updateHintBoost(const std::string &boost, int32_t durationMs);
@@ -51,6 +51,7 @@ class PowerSessionManager : public ::android::RefBase {
     // Add and remove power hint session
     void addPowerSession(const std::string &idString,
                          const std::shared_ptr<AppHintDesc> &sessionDescriptor,
+                         const std::shared_ptr<AppDescriptorTrace> &sessionTrace,
                          const std::vector<int32_t> &threadIds);
     void removePowerSession(int64_t sessionId);
     // Replace current threads in session with threadIds
@@ -62,21 +63,34 @@ class PowerSessionManager : public ::android::RefBase {
     void updateUniversalBoostMode();
     void dumpToFd(int fd);
 
-    void updateTargetWorkDuration(int64_t sessionId, AdpfHintType voteId,
+    void updateTargetWorkDuration(int64_t sessionId, AdpfVoteType voteId,
                                   std::chrono::nanoseconds durationNs);
 
     // Set vote for power hint session
-    void voteSet(int64_t sessionId, AdpfHintType voteId, int uclampMin, int uclampMax,
+    void voteSet(int64_t sessionId, AdpfVoteType voteId, int uclampMin, int uclampMax,
+                 std::chrono::steady_clock::time_point startTime,
+                 std::chrono::nanoseconds durationNs);
+    void voteSet(int64_t sessionId, AdpfVoteType voteId, Cycles capacity,
                  std::chrono::steady_clock::time_point startTime,
                  std::chrono::nanoseconds durationNs);
 
     void disableBoosts(int64_t sessionId);
 
+    void setPreferPowerEfficiency(int64_t sessionId, bool enabled);
+
     // Singleton
-    static sp<PowerSessionManager> getInstance() {
-        static sp<PowerSessionManager> instance = new PowerSessionManager();
-        return instance;
+    static PowerSessionManager *getInstance() {
+        static PowerSessionManager instance{};
+        return &instance;
     }
+
+    std::optional<Frequency> gpuFrequency() const;
+
+    void registerSession(std::shared_ptr<void> session, int64_t sessionId);
+    void unregisterSession(int64_t sessionId);
+    // Only for testing
+    void clear();
+    std::shared_ptr<void> getSession(int64_t sessionId);
 
   private:
     std::optional<bool> isAnyAppSessionActive();
@@ -101,7 +115,13 @@ class PowerSessionManager : public ::android::RefBase {
     TemplatePriorityQueueWorker<EventSessionTimeout> mEventSessionTimeoutWorker;
 
     // Calculate uclamp range
-    void applyUclamp(int64_t sessionId, std::chrono::steady_clock::time_point timePoint);
+    void applyUclampLocked(int64_t sessionId, std::chrono::steady_clock::time_point timePoint)
+            REQUIRES(mSessionTaskMapMutex);
+
+    void applyGpuVotesLocked(int64_t sessionId, std::chrono::steady_clock::time_point timePoint)
+            REQUIRES(mSessionTaskMapMutex);
+
+    void applyCpuAndGpuVotes(int64_t sessionId, std::chrono::steady_clock::time_point timePoint);
     // Force a session active or in-active, helper for other methods
     void forceSessionActive(int64_t sessionId, bool isActive);
 
@@ -111,9 +131,15 @@ class PowerSessionManager : public ::android::RefBase {
                                                              "ADPF_DISABLE_TA_BOOST")),
           mDisplayRefreshRate(60),
           mPriorityQueueWorkerPool(new PriorityQueueWorkerPool(1, "adpf_handler")),
-          mEventSessionTimeoutWorker([&](auto e) { handleEvent(e); }, mPriorityQueueWorkerPool) {}
+          mEventSessionTimeoutWorker([&](auto e) { handleEvent(e); }, mPriorityQueueWorkerPool),
+          mGpuCapacityNode(createGpuCapacityNode()) {}
     PowerSessionManager(PowerSessionManager const &) = delete;
-    void operator=(PowerSessionManager const &) = delete;
+    PowerSessionManager &operator=(PowerSessionManager const &) = delete;
+
+    std::optional<std::unique_ptr<GpuCapacityNode>> const mGpuCapacityNode;
+
+    std::mutex mSessionMapMutex;
+    std::map<int, std::weak_ptr<void>> mSessionMap GUARDED_BY(mSessionMapMutex);
 };
 
 }  // namespace pixel

@@ -23,13 +23,13 @@ namespace power {
 namespace impl {
 namespace pixel {
 
-static void confine(UclampRange *uclampRange, const CpuVote &cpu_vote,
+static void confine(UclampRange &uclampRange, const CpuVote &cpu_vote,
                     std::chrono::steady_clock::time_point t) {
     if (!cpu_vote.isTimeInRange(t)) {
         return;
     }
-    uclampRange->uclampMin = std::max(uclampRange->uclampMin, cpu_vote.mUclampRange.uclampMin);
-    uclampRange->uclampMax = std::min(uclampRange->uclampMax, cpu_vote.mUclampRange.uclampMax);
+    uclampRange.uclampMin = std::max(uclampRange.uclampMin, cpu_vote.mUclampRange.uclampMin);
+    uclampRange.uclampMax = std::min(uclampRange.uclampMax, cpu_vote.mUclampRange.uclampMax);
 }
 
 std::ostream &operator<<(std::ostream &o, const UclampRange &uc) {
@@ -39,12 +39,12 @@ std::ostream &operator<<(std::ostream &o, const UclampRange &uc) {
 
 Votes::Votes() {}
 
-constexpr static auto gpu_vote_id = static_cast<int>(AdpfHintType::ADPF_GPU_CAPACITY);
+constexpr static auto gpu_vote_id = static_cast<int>(AdpfVoteType::GPU_CAPACITY);
 
 static inline bool isGpuVote(int type_raw) {
-    AdpfHintType const type = static_cast<AdpfHintType>(type_raw);
-    return type == AdpfHintType::ADPF_GPU_CAPACITY || type == AdpfHintType::ADPF_GPU_LOAD_UP ||
-           type == AdpfHintType::ADPF_GPU_LOAD_DOWN || type == AdpfHintType::ADPF_GPU_LOAD_RESET;
+    AdpfVoteType const type = static_cast<AdpfVoteType>(type_raw);
+    return type == AdpfVoteType::GPU_CAPACITY || type == AdpfVoteType::GPU_LOAD_UP ||
+           type == AdpfVoteType::GPU_LOAD_DOWN || type == AdpfVoteType::GPU_LOAD_RESET;
 }
 
 void Votes::add(int id, CpuVote const &vote) {
@@ -54,11 +54,20 @@ void Votes::add(int id, CpuVote const &vote) {
 }
 
 std::optional<Cycles> Votes::getGpuCapacityRequest(std::chrono::steady_clock::time_point t) const {
-    auto it = mGpuVotes.find(static_cast<int>(AdpfHintType::ADPF_GPU_CAPACITY));
-    if (it != mGpuVotes.end() && it->second.isTimeInRange(t)) {
-        return {it->second.mCapacity};
+    std::optional<Cycles> res = std::nullopt;
+
+    constexpr AdpfVoteType gpu_capacity_hints[] = {
+            AdpfVoteType::GPU_CAPACITY,
+            AdpfVoteType::GPU_LOAD_UP,
+    };
+    for (auto const hint : gpu_capacity_hints) {
+        auto it = mGpuVotes.find(static_cast<int>(hint));
+        if (it != mGpuVotes.end() && it->second.isTimeInRange(t)) {
+            res = res.value_or(Cycles(0)) + it->second.mCapacity;
+        }
     }
-    return {};
+
+    return res;
 }
 
 void Votes::add(int id, GpuVote const &vote) {
@@ -82,11 +91,8 @@ void Votes::updateDuration(int voteId, std::chrono::nanoseconds durationNs) {
     }
 }
 
-void Votes::getUclampRange(UclampRange *uclampRange,
+void Votes::getUclampRange(UclampRange &uclampRange,
                            std::chrono::steady_clock::time_point t) const {
-    if (nullptr == uclampRange) {
-        return;
-    }
     for (auto it = mCpuVotes.begin(); it != mCpuVotes.end(); it++) {
         auto timings_it = mCpuVotes.find(it->first);
         confine(uclampRange, it->second, t);
@@ -164,7 +170,7 @@ size_t Votes::size() const {
     return mCpuVotes.size() + mGpuVotes.size();
 }
 
-bool Votes::voteIsActive(int voteId) {
+bool Votes::voteIsActive(int voteId) const {
     if (isGpuVote(voteId)) {
         auto const itr = mGpuVotes.find(voteId);
         if (itr == mGpuVotes.end()) {
@@ -180,7 +186,7 @@ bool Votes::voteIsActive(int voteId) {
     return itr->second.active();
 }
 
-std::chrono::steady_clock::time_point Votes::voteTimeout(int voteId) {
+std::chrono::steady_clock::time_point Votes::voteTimeout(int voteId) const {
     if (isGpuVote(voteId)) {
         auto const itr = mGpuVotes.find(voteId);
         if (itr == mGpuVotes.end()) {
