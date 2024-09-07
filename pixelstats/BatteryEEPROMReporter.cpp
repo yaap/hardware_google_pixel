@@ -497,14 +497,15 @@ void BatteryEEPROMReporter::checkAndReportFGLearning(const std::shared_ptr<IStat
         }
     }
 
+    /* not found */
+    if (path.empty())
+        return;
+
     clock_gettime(CLOCK_MONOTONIC, &boot_time);
+
     readLogbuffer(path, kNumFGLearningFieldsV3, params.checksum, format, last_lh_check_, events);
     if (events.size() == 0)
         readLogbuffer(path, kNumFGLearningFieldsV2, params.checksum, format, last_lh_check_, events);
-    if (events.size() == 0)
-        readLogbuffer(path, kNumFGLearningFieldsV2, "learn", format, last_lh_check_, events);
-    if (events.size() == 0)
-        readLogbuffer(path, kNumFGLearningFields, "learn", format, last_lh_check_, events);
 
     for (int event_idx = 0; event_idx < events.size(); event_idx++) {
         std::vector<uint32_t> &event = events[event_idx];
@@ -528,17 +529,6 @@ void BatteryEEPROMReporter::checkAndReportFGLearning(const std::shared_ptr<IStat
             params.tempco = event[15];                 /* tempco */
             if (event.size() == kNumFGLearningFieldsV3)
                 params.soh = event[16];                /* unix time */
-        } else if (event.size() == kNumFGLearningFields) {
-            params.full_cap = event[0];     /* fcnom */
-            params.esr = event[1];          /* dpacc */
-            params.rslow = event[2];        /* dqacc */
-            params.max_vbatt = event[3];    /* fcrep */
-            params.full_rep = event[4];     /* repsoc */
-            params.min_vbatt = event[5];    /* mixsoc */
-            params.max_ibatt = event[6];    /* vfsoc */
-            params.min_ibatt = event[7];    /* fstats */
-            params.rcomp0 = event[8];       /* rcomp0 */
-            params.tempco = event[9];       /* tempco */
         } else {
             ALOGE("Not support %zu fields for FG learning event", event.size());
             continue;
@@ -566,21 +556,23 @@ void BatteryEEPROMReporter::checkAndReportValidation(const std::shared_ptr<IStat
         }
     }
 
+    /* not found */
+    if (path.empty())
+        return;
+
     clock_gettime(CLOCK_MONOTONIC, &boot_time);
 
-    if (!path.empty() && fileExists(path)) {
-        readLogbuffer(path, kNumValidationFields, params.checksum, format, last_hv_check_, events);
-        for (int event_idx = 0; event_idx < events.size(); event_idx++) {
-            std::vector<uint32_t> &event = events[event_idx];
-            if (event.size() == kNumValidationFields) {
-                params.full_cap = event[0]; /* fcnom */
-                params.esr = event[1];      /* dpacc */
-                params.rslow = event[2];    /* dqacc */
-                params.full_rep = event[3]; /* fcrep */
-                reportEventInt32(stats_client, params);
-            } else {
-                ALOGE("Not support %zu fields for History Validation event", event.size());
-            }
+    readLogbuffer(path, kNumValidationFields, params.checksum, format, last_hv_check_, events);
+    for (int event_idx = 0; event_idx < events.size(); event_idx++) {
+        std::vector<uint32_t> &event = events[event_idx];
+        if (event.size() == kNumValidationFields) {
+            params.full_cap = event[0]; /* fcnom */
+            params.esr = event[1];      /* dpacc */
+            params.rslow = event[2];    /* dqacc */
+            params.full_rep = event[3]; /* fcrep */
+            reportEventInt32(stats_client, params);
+        } else {
+            ALOGE("Not support %zu fields for History Validation event", event.size());
         }
     }
     last_hv_check_ = (unsigned int)boot_time.tv_sec;
