@@ -122,8 +122,8 @@ class BatteryEEPROMReporter {
     /* The number of elements in struct BatteryHistory for P20 series */
     const int kNumBatteryHistoryFields = 19;
     /* The number of elements for relaxation event */
-    const int kNumFGLearningFields = 10;
     const int kNumFGLearningFieldsV2 = 16;
+    /* with additional unix time field */
     const int kNumFGLearningFieldsV3 = 17;
     unsigned int last_lh_check_ = 0;
     /* The number of elements for history validation event */
