@@ -2762,7 +2762,8 @@ message DisplayPortMaxResolutionCountStatsReported{
  * Logged from:
  *   vendor/google/whitechapel/audio/hal/aidl/audio/metric/suez_data_adapter/statsd_suez_data_adapter.cc
  *
- * Estimated Logging Rate: Once per audio recording.
+ * Estimated Logging Rate: Any time during audio recording that screen_orientation / audio device / use case changes.
+ * It will be aggregated in a count and value metric to keep the resource usage low.
  */
 message VendorAudioDspRecordUsageStatsReported {
   /* Vendor reverse domain name */
@@ -2791,11 +2792,151 @@ message VendorAudioDspRecordUsageStatsReported {
     CUSTOM_IN_PCM5 = 19;
   }
 
+  /* Audio Device Interface. */
+  enum AudioDeviceInterface {
+    UNKNOWN_DEVICE_INTERFACE = 0;
+
+    // Built-in speakers
+    SPEAKER = 1;
+    SPEAKER_EARPIECE = 2;
+    SPEAKER_SAFE = 3;
+
+    // Built-in microphones
+    MICROPHONES = 4;
+    BACK_MICROPHONES = 5;
+    // internal used microphones
+    ULTRASOUND_MICROPHONES = 6;
+    SOUND_TRIGGER_MICROPHONES = 7;
+
+    // BT SCO
+    BLUETOOTH_SCO_DEFAULT = 8;
+    BLUETOOTH_SCO_HEADSET = 9;
+    BLUETOOTH_SCO_CAR_KIT = 10;
+    BLUETOOTH_SCO_HEADSET_MICROPHONES = 11;
+
+    // BT A2DP
+    BLUETOOTH_A2DP_DEVICE = 12;
+    BLUETOOTH_A2DP_SPEAKER = 13;
+    BLUETOOTH_A2DP_HEADPHONE = 14;
+
+    // BT low energy (BLE)
+    BLUETOOTH_LOW_ENERGY_SPEAKER = 15;
+    BLUETOOTH_LOW_ENERGY_HEADSET = 16;
+    BLUETOOTH_LOW_ENERGY_BROADCAST = 17;
+    BLUETOOTH_LOW_ENERGY_HEADSET_MICROPHONES = 18;
+
+    // USB
+    USB_DEVICE = 19;
+    USB_HEADSET = 20;
+    USB_DOCK = 21;
+    USB_DEVICE_MICROPHONES = 22;
+    USB_HEADSET_MICROPHONES = 23;
+    USB_DOCK_MICROPHONES = 24;
+
+    // HDMI
+    HDMI_DEVICE = 25;
+
+    // Telephony
+    TELEPHONY_TX = 26;
+    TELEPHONY_RX = 27;
+    IN_CALL_CAPTURE_SOURCE0 = 28;
+    IN_CALL_CAPTURE_SOURCE1 = 29;
+    IN_CALL_CAPTURE_SOURCE2 = 30;
+
+    // Null sink and source
+    NULL_SOURCE = 31;
+    NULL_SINK = 32;
+
+    // Echo reference
+    ECHO_REFERENCE_DEVICE_INTERFACE = 33;
+  }
+
+  /* Audio Use Case. */
+  enum UseCase {
+    UNKNOWN_VENDOR_AUDIO_USECASE = 0;
+    // playback use cases
+    PRIMARY_PLAYBACK = 1;
+    RAW_PLAYBACK = 2;
+    DEEP_BUFFER_PLAYBACK = 3;
+    COMPRESS_OFFLOAD_PLAYBACK = 4;
+    MMAP_PLAYBACK = 5;
+    HIFI_PLAYBACK = 6;
+    VOIP_PLAYBACK = 7;
+    TELEPHONY_PLAYBACK = 8;
+    IN_CALL_PLAYBACK = 9;
+    SPATIALIZER_PLAYBACK = 10;
+    ULTRASOUND_PLAYBACK = 11;
+    HAPTIC_PLAYBACK = 12;
+    SPATIALIZER_OFFLOAD_PLAYBACK = 13;
+    // capture use cases
+    PRIMARY_CAPTURE = 14;
+    FAST_CAPTURE = 15;
+    HIFI_CAPTURE = 16;
+    MMAP_CAPTURE = 17;
+    VOIP_CAPTURE = 18;
+    VOIP_GSENET_CAPTURE = 19;
+    ULTRASOUND_CAPTURE = 20;
+    TELEPHONY_CAPTURE = 21;
+    IN_CALL_CAPTURE = 22;
+    SOUND_TRIGGER_CAPTURE = 23;
+    SOUND_TRIGGER_TAP_CAPTURE = 24;
+    HOTWORD_LOOKBACK_CAPTURE = 25;
+    ECHO_REFERENCE_CAPTURE = 26;
+
+    // voice call use case
+    VOICE_CALL_DOWNLINK = 27;
+    VOICE_CALL_UPLINK = 28;
+  }
+
+  /* Audio source with the original enum value. */
+  enum AudioSource {
+    DEFAULT = 0;
+    MIC = 1;
+    VOICE_UPLINK = 2;
+    VOICE_DOWNLINK = 3;
+    VOICE_CALL = 4;
+    CAMCORDER = 5;
+    VOICE_RECOGNITION = 6;
+    VOICE_COMMUNICATION = 7;
+    REMOTE_SUBMIX = 8;
+    UNPROCESSED = 9;
+    VOICE_PERFORMANCE = 10;
+    ECHO_REFERENCE = 1997;
+    FM_TUNER = 1998;
+    HOTWORD = 1999;
+    ULTRASOUND = 2000;
+  };
+
+  enum CameraType {
+    UNKNOWN_CAMERA_TYPE = 0;
+    FRONT_CAMERA = 1;
+    BACK_CAMERA = 2;
+  }
+
   /* Type of Backend used in recording */
-  optional Type type = 2;
+  optional Type type = 2 [deprecated = true];
 
   /* Duration in second */
   optional int32 duration_second = 3;
+
+  optional AudioSource audio_source = 4;
+
+  /* Device interface used */
+  optional AudioDeviceInterface audio_device_interface = 5;
+
+  /* Usecase used */
+  optional UseCase vendor_audio_use_case = 6;
+
+  /* Camera Type */
+  optional CameraType camera_type = 7;
+
+  /* Screen orientation used. */
+  optional int32 screen_orientation = 8;
+
+  /* True if this atom represent the beginning of recording. If usecase/interfaces/orientation
+   * changes mid-recording, new atom will be uploaded but this value will be false.
+   */
+  optional bool is_beginning_of_recording = 9;
 };
 
 /*
