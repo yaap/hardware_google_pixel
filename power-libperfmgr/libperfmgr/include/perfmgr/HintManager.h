@@ -129,11 +129,11 @@ class HintManager {
     bool SetAdpfProfileFromDoHint(const std::string &profile_name);
     std::shared_ptr<AdpfConfig> GetAdpfProfileFromDoHint() const;
 
-    bool SetAdpfProfile(const std::string &tag, const std::string &profile);
+    // Hint Update Callback
+    void OnNodeUpdate(const std::string &name, const std::string &path, const std::string &value);
 
-    typedef std::function<void(std::shared_ptr<AdpfConfig>)> AdpfCallback;
-    void RegisterAdpfUpdateEvent(const std::string &tag, AdpfCallback *update_adpf_func);
-    void UnregisterAdpfUpdateEvent(const std::string &tag, AdpfCallback *update_adpf_func);
+    // set ADPF config by hint name.
+    bool SetAdpfProfile(const std::string &tag, const std::string &profile);
 
     std::optional<std::string> gpu_sysfs_config_path() const;
 
@@ -193,11 +193,6 @@ class HintManager {
     std::optional<std::string> gpu_sysfs_config_path_;
 
     static std::unique_ptr<HintManager> sInstance;
-
-    // Hint Update Callback
-    void OnNodeUpdate(const std::string &name, const std::string &path, const std::string &value);
-    // set ADPF config by hint name.
-    std::unordered_map<std::string, std::vector<AdpfCallback *>> tag_update_callback_list_;
 };
 
 }  // namespace perfmgr

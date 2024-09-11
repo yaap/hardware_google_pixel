@@ -372,7 +372,7 @@ HintManager *HintManager::GetFromJSON(const std::string &config_path, bool start
     for (std::size_t i = 0; i < nodes.size(); ++i) {
         const std::string &node_name = nodes[i]->GetName();
         const std::string &node_path = nodes[i]->GetPath();
-        if (node_path.starts_with(kAdpfEventNodePath)) {
+        if (node_path.find(kAdpfEventNodePath) == 0) {
             std::string tag = node_path.substr(strlen(kAdpfEventNodePath));
             std::size_t index = nodes[i]->GetDefaultIndex();
             std::string profile_name = nodes[i]->GetValues()[index];
@@ -985,36 +985,13 @@ void HintManager::OnNodeUpdate(const std::string &name,
                                __attribute__((unused)) const std::string &path,
                                const std::string &value) {
     // Check if the node is to update ADPF.
-    if (path.starts_with(kAdpfEventNodePath)) {
+    if (path.find(kAdpfEventNodePath) == 0) {
         std::string tag = path.substr(strlen(kAdpfEventNodePath));
         bool updated = SetAdpfProfile(tag, value);
         if (!updated) {
             LOG(DEBUG) << "OnNodeUpdate:[" << name << "] failed to update '" << value << "'";
             return;
         }
-        auto &callback_list = tag_update_callback_list_[tag];
-        for (const auto &callback : callback_list) {
-            (*callback)(tag_profile_map_[tag]);
-        }
-    }
-}
-
-void HintManager::RegisterAdpfUpdateEvent(const std::string &tag, AdpfCallback *update_adpf_func) {
-    tag_update_callback_list_[tag].push_back(update_adpf_func);
-}
-
-void HintManager::UnregisterAdpfUpdateEvent(const std::string &tag,
-                                            AdpfCallback *update_adpf_func) {
-    auto &callback_list = tag_update_callback_list_[tag];
-    // Use std::find to locate the function object
-    auto it = std::find_if(
-            callback_list.begin(), callback_list.end(),
-            [update_adpf_func](const std::function<void(const std::shared_ptr<AdpfConfig>)> *func) {
-                return func == update_adpf_func;
-            });
-    if (it != callback_list.end()) {
-        // Erase the found function object
-        callback_list.erase(it);
     }
 }
 
