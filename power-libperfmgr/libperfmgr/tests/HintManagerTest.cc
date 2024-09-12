@@ -1017,6 +1017,49 @@ TEST_F(HintManagerTest, SetAdpfProfile) {
     EXPECT_EQ("SF_VIDEO_30FPS", hm->GetAdpfProfile("OTHER")->mName);
 }
 
+TEST_F(HintManagerTest, DoHintForEventNode) {
+    TemporaryFile json_file;
+    ASSERT_TRUE(android::base::WriteStringToFile(kJSON_ADPF, json_file.path)) << strerror(errno);
+    HintManager *hm = HintManager::GetFromJSON(json_file.path, false);
+    EXPECT_NE(nullptr, hm);
+    EXPECT_TRUE(hm->Start());
+    EXPECT_TRUE(hm->IsRunning());
+    EXPECT_EQ("ADPF_SF", hm->GetAdpfProfile("SURFACEFLINGER")->mName);
+    hm->DoHint("SF_RESET");
+    std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
+    EXPECT_EQ("ADPF_DEFAULT", hm->GetAdpfProfile("SURFACEFLINGER")->mName);
+}
+
+TEST_F(HintManagerTest, RegisterAdpfUpdateEventAndUnregister) {
+    TemporaryFile json_file;
+    ASSERT_TRUE(android::base::WriteStringToFile(kJSON_ADPF, json_file.path)) << strerror(errno);
+    HintManager *hm = HintManager::GetFromJSON(json_file.path, false);
+    EXPECT_NE(nullptr, hm);
+    EXPECT_TRUE(hm->Start());
+    EXPECT_TRUE(hm->IsRunning());
+    int count = 0;
+    std::string name;
+    AdpfCallback callback = [&](std::shared_ptr<AdpfConfig> profile) {
+        count++;
+        name = profile->mName;
+    };
+    // the callback should be invoked by DoHint().
+    hm->RegisterAdpfUpdateEvent("SURFACEFLINGER", &callback);
+    hm->DoHint("SF_RESET");
+    std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
+    EXPECT_EQ(1, count);
+    EXPECT_EQ("ADPF_DEFAULT", name);
+
+    // Unregister and DoHint('SF_PLAYING'). the callback shouldn't be called.
+    hm->UnregisterAdpfUpdateEvent("SURFACEFLINGER", &callback);
+    hm->EndHint("SF_RESET");
+    hm->DoHint("SF_PLAYING");
+    std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
+    EXPECT_EQ("ADPF_SF", hm->GetAdpfProfile("SURFACEFLINGER")->mName);
+    EXPECT_EQ(1, count);
+    EXPECT_EQ("ADPF_DEFAULT", name);
+}
+
 TEST_F(HintManagerTest, GetAdpfProfileFromDoHint) {
     TemporaryFile json_file;
     ASSERT_TRUE(android::base::WriteStringToFile(kJSON_ADPF, json_file.path)) << strerror(errno);
