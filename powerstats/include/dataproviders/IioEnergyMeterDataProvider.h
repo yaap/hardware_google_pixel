@@ -28,7 +28,7 @@ namespace stats {
 
 class IioEnergyMeterDataProvider : public PowerStats::IEnergyMeterDataProvider {
   public:
-    IioEnergyMeterDataProvider(const std::vector<const std::string> &deviceNames,
+    IioEnergyMeterDataProvider(const std::vector<std::string> &deviceNames,
                                const bool useSelector = false);
 
     // Methods from PowerStats::IRailEnergyDataProvider
@@ -48,7 +48,7 @@ class IioEnergyMeterDataProvider : public PowerStats::IEnergyMeterDataProvider {
     std::vector<Channel> mChannelInfos;
     std::vector<EnergyMeasurement> mReading;
 
-    const std::vector<const std::string> kDeviceNames;
+    const std::vector<std::string> kDeviceNames;
     const std::string kDeviceType = "iio:device";
     const std::string kIioRootDir = "/sys/bus/iio/devices/";
     const std::string kNameNode = "/name";
