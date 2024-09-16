@@ -48,7 +48,7 @@ class IioEnergyMeterDataSelector {
     const std::string kSelectionComplete = "CONFIG_COMPLETE";
 
     /* Order matters (ascending priority), see applyConfigsByAscendingPriority() */
-    const std::vector<const std::string> kConfigPaths = {
+    const std::vector<std::string> kConfigPaths = {
             "/data/vendor/powerstats/odpm_config",
     };
 };
