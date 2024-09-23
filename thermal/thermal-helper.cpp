@@ -381,15 +381,14 @@ bool getThermalZoneTypeById(int tz_id, std::string *type) {
     std::string path =
             ::android::base::StringPrintf("%s/%s%d/%s", kThermalSensorsRoot.data(),
                                           kSensorPrefix.data(), tz_id, kThermalNameFile.data());
-    LOG(INFO) << "TZ Path: " << path;
     if (!::android::base::ReadFileToString(path, &tz_type)) {
-        LOG(ERROR) << "Failed to read sensor: " << tz_type;
+        LOG(ERROR) << "Failed to read sensor from: " << path;
         return false;
     }
 
     // Strip the newline.
     *type = ::android::base::Trim(tz_type);
-    LOG(INFO) << "TZ type: " << *type;
+    LOG(INFO) << "TZ path: " << path << " type: " << *type;
     return true;
 }
 
