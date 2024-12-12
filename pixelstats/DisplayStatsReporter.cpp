@@ -320,6 +320,146 @@ void DisplayStatsReporter::logHDCPAuthTypeStats(const std::shared_ptr<IStats> &s
     if (!ret.isOk())
         ALOGE("Unable to report hdcp stats to Stats service");
 }
+
+// Capture dsc/fec support from sysfs nodes
+bool DisplayStatsReporter::captureDisplayPortFECDSCStats(
+        const std::vector<std::string> &displayport_fecdsc_stats_paths, int64_t *pcur_data) {
+    bool report_stats = false;
+    std::string path;
+
+    if (displayport_fecdsc_stats_paths.size() < DISPLAY_PORT_DSC_STATS_SIZE) {
+        ALOGE("Number of displayport dsc support stats paths (%zu) is less than expected (%d)",
+              displayport_fecdsc_stats_paths.size(), DISPLAY_PORT_DSC_STATS_SIZE);
+        return false;
+    }
+
+    // Iterate over the sysfs nodes and collect the data
+    for (int i = 0; i < DISPLAY_PORT_DSC_STATS_SIZE; i++) {
+        // Get the sysfs path from the stats path array
+        path = displayport_fecdsc_stats_paths[i];
+
+        if (!readDisplayErrorCount(path, &(pcur_data[i]))) {
+            // Failed to read new data, keep previous data that was saved.
+            pcur_data[i] = prev_dp_dsc_data_[i];
+        } else {
+            report_stats |= (pcur_data[i] > prev_dp_dsc_data_[i]);
+        }
+    }
+
+    return report_stats;
+}
+
+void DisplayStatsReporter::logDisplayPortFECDSCStats(
+        const std::shared_ptr<IStats> &stats_client,
+        const std::vector<std::string> &displayport_fecdsc_stats_paths) {
+    int64_t cur_data[DISPLAY_PORT_DSC_STATS_SIZE];
+    bool report_stats = false;
+
+    memcpy(cur_data, prev_dp_dsc_data_, sizeof(prev_dp_dsc_data_));
+    if (!captureDisplayPortFECDSCStats(displayport_fecdsc_stats_paths, &cur_data[0])) {
+        memcpy(prev_dp_dsc_data_, cur_data, sizeof(cur_data));
+        return;
+    }
+
+    VendorAtomValue tmp;
+    int64_t max_use_count = static_cast<int64_t>(INT32_MAX);
+    int use_count;
+    std::vector<VendorAtomValue> values(DISPLAY_PORT_DSC_STATS_SIZE);
+
+    for (int i = 0; i < DISPLAY_PORT_DSC_STATS_SIZE; i++) {
+        use_count = std::min<int64_t>(cur_data[i] - prev_dp_dsc_data_[i], max_use_count);
+        if (verifyCount(use_count, &report_stats) < 0)
+            return;
+
+        tmp.set<VendorAtomValue::intValue>(use_count);
+        values[i] = tmp;
+    }
+
+    memcpy(prev_dp_dsc_data_, cur_data, sizeof(cur_data));
+
+    if (!report_stats)
+        return;
+
+    ALOGD("Report updated DisplayPort FEC/DSC metrics to stats service");
+    // Send vendor atom to IStats HAL
+    VendorAtom event = {.reverseDomainName = "",
+                        .atomId = PixelAtoms::Atom::kDisplayPortDscSupportStats,
+                        .values = std::move(values)};
+    const ndk::ScopedAStatus ret = stats_client->reportVendorAtom(event);
+    if (!ret.isOk())
+        ALOGE("Unable to report DisplayPort FEC/DSC stats to Stats service");
+}
+
+// Capture maximum resolution support from sysfs nodes
+bool DisplayStatsReporter::captureDisplayPortMaxResStats(
+        const std::vector<std::string> &displayport_max_res_stats_paths, int64_t *pcur_data) {
+    bool report_stats = false;
+    std::string path;
+
+    if (displayport_max_res_stats_paths.size() < DISPLAY_PORT_MAX_RES_STATS_SIZE) {
+        ALOGE("Number of displayport maximum resolution stats paths (%zu) is less than expected "
+              "(%d)",
+              displayport_max_res_stats_paths.size(), DISPLAY_PORT_MAX_RES_STATS_SIZE);
+        return false;
+    }
+
+    // Iterate over the sysfs nodes and collect the data
+    for (int i = 0; i < DISPLAY_PORT_MAX_RES_STATS_SIZE; i++) {
+        // Get the sysfs path from the stats path array
+        path = displayport_max_res_stats_paths[i];
+
+        if (!readDisplayErrorCount(path, &(pcur_data[i]))) {
+            // Failed to read new data, keep previous data that was saved.
+            pcur_data[i] = prev_dp_max_res_data_[i];
+        } else {
+            report_stats |= (pcur_data[i] > prev_dp_max_res_data_[i]);
+        }
+    }
+
+    return report_stats;
+}
+
+void DisplayStatsReporter::logDisplayPortMaxResStats(
+        const std::shared_ptr<IStats> &stats_client,
+        const std::vector<std::string> &displayport_max_res_stats_paths) {
+    int64_t cur_data[DISPLAY_PORT_MAX_RES_STATS_SIZE];
+    bool report_stats = false;
+
+    memcpy(cur_data, prev_dp_max_res_data_, sizeof(prev_dp_max_res_data_));
+    if (!captureDisplayPortMaxResStats(displayport_max_res_stats_paths, &cur_data[0])) {
+        memcpy(prev_dp_max_res_data_, cur_data, sizeof(cur_data));
+        return;
+    }
+
+    VendorAtomValue tmp;
+    int64_t max_use_count = static_cast<int64_t>(INT32_MAX);
+    int use_count;
+    std::vector<VendorAtomValue> values(DISPLAY_PORT_MAX_RES_STATS_SIZE);
+
+    for (int i = 0; i < DISPLAY_PORT_MAX_RES_STATS_SIZE; i++) {
+        use_count = std::min<int64_t>(cur_data[i] - prev_dp_max_res_data_[i], max_use_count);
+        if (verifyCount(use_count, &report_stats) < 0)
+            return;
+
+        tmp.set<VendorAtomValue::intValue>(use_count);
+        values[i] = tmp;
+    }
+
+    memcpy(prev_dp_max_res_data_, cur_data, sizeof(cur_data));
+
+    if (!report_stats)
+        return;
+
+    ALOGD("Report updated displayport maximum resolution metrics to stats service");
+    // Send vendor atom to IStats HAL
+    VendorAtom event = {.reverseDomainName = "",
+                        .atomId = PixelAtoms::Atom::kDisplayPortMaxResolutionStats,
+                        .values = std::move(values)};
+    const ndk::ScopedAStatus ret = stats_client->reportVendorAtom(event);
+    if (!ret.isOk())
+        ALOGE("Unable to report DisplayPort maximum resolution stats to Stats service");
+}
+
 void DisplayStatsReporter::logDisplayStats(const std::shared_ptr<IStats> &stats_client,
                                            const std::vector<std::string> &display_stats_paths,
                                            const display_stats_type stats_type) {
@@ -332,6 +472,12 @@ void DisplayStatsReporter::logDisplayStats(const std::shared_ptr<IStats> &stats_
             break;
         case HDCP_STATE:
             logHDCPAuthTypeStats(stats_client, display_stats_paths);
+            break;
+        case DISP_PORT_DSC_STATE:
+            logDisplayPortFECDSCStats(stats_client, display_stats_paths);
+            break;
+        case DISP_PORT_MAX_RES_STATE:
+            logDisplayPortMaxResStats(stats_client, display_stats_paths);
             break;
         default:
             ALOGE("Unsupport display state type(%d)", stats_type);

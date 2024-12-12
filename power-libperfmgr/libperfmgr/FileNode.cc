@@ -31,7 +31,8 @@ namespace android {
 namespace perfmgr {
 
 FileNode::FileNode(std::string name, std::string node_path, std::vector<RequestGroup> req_sorted,
-                   std::size_t default_val_index, bool reset_on_init, bool truncate, bool hold_fd, bool write_only)
+                   std::size_t default_val_index, bool reset_on_init, bool truncate, bool hold_fd,
+                   bool write_only)
     : Node(std::move(name), std::move(node_path), std::move(req_sorted), default_val_index,
            reset_on_init),
       hold_fd_(hold_fd),
@@ -56,7 +57,9 @@ std::chrono::milliseconds FileNode::Update(bool log_error) {
         const std::string& req_value =
             req_sorted_[value_index].GetRequestValue();
         if (ATRACE_ENABLED()) {
-            const std::string tag = GetName() + ":" + req_value;
+            ATRACE_INT(("N:" + GetName()).c_str(), value_index);
+            const std::string tag =
+                    GetName() + ":" + req_value + ":" + std::to_string(expire_time.count());
             ATRACE_BEGIN(tag.c_str());
         }
         android::base::Timer t;

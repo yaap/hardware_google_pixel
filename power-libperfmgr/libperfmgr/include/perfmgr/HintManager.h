@@ -90,10 +90,12 @@ class HintManager {
   public:
     HintManager(sp<NodeLooperThread> nm, const std::unordered_map<std::string, Hint> &actions,
                 const std::vector<std::shared_ptr<AdpfConfig>> &adpfs,
+                const std::unordered_map<std::string, std::shared_ptr<AdpfConfig>> &tag_adpfs,
                 std::optional<std::string> gpu_sysfs_config_path)
         : nm_(std::move(nm)),
           actions_(actions),
           adpfs_(adpfs),
+          tag_profile_map_(tag_adpfs),
           adpf_index_(0),
           gpu_sysfs_config_path_(gpu_sysfs_config_path) {}
     ~HintManager() {
@@ -123,13 +125,23 @@ class HintManager {
     // Query if given hint enabled.
     bool IsHintEnabled(const std::string &hint_type) const;
 
-    // set ADPF config by profile name.
-    bool SetAdpfProfile(const std::string &profile_name);
+    // TODO(jimmyshiu@): Need to be removed once all powerhint.json up-to-date.
+    bool SetAdpfProfileFromDoHint(const std::string &profile_name);
+    std::shared_ptr<AdpfConfig> GetAdpfProfileFromDoHint() const;
+
+    bool SetAdpfProfile(const std::string &tag, const std::string &profile);
+
+    typedef std::function<void(std::shared_ptr<AdpfConfig>)> AdpfCallback;
+    void RegisterAdpfUpdateEvent(const std::string &tag, AdpfCallback *update_adpf_func);
+    void UnregisterAdpfUpdateEvent(const std::string &tag, AdpfCallback *update_adpf_func);
 
     std::optional<std::string> gpu_sysfs_config_path() const;
 
     // get current ADPF.
-    std::shared_ptr<AdpfConfig> GetAdpfProfile() const;
+    std::shared_ptr<AdpfConfig> GetAdpfProfile(const std::string &node_name = "OTHER") const;
+
+    // Check if ADPF is supported.
+    bool IsAdpfSupported() const;
 
     // Query if given AdpfProfile supported.
     bool IsAdpfProfileSupported(const std::string &name) const;
@@ -153,8 +165,7 @@ class HintManager {
     static HintManager *GetInstance();
 
   protected:
-    static std::vector<std::unique_ptr<Node>> ParseNodes(
-        const std::string& json_doc);
+    static std::vector<std::unique_ptr<Node>> ParseNodes(const std::string &json_doc);
     static std::unordered_map<std::string, Hint> ParseActions(
             const std::string &json_doc, const std::vector<std::unique_ptr<Node>> &nodes);
     static std::vector<std::shared_ptr<AdpfConfig>> ParseAdpfConfigs(const std::string &json_doc);
@@ -176,10 +187,17 @@ class HintManager {
     sp<NodeLooperThread> nm_;
     std::unordered_map<std::string, Hint> actions_;
     std::vector<std::shared_ptr<AdpfConfig>> adpfs_;
+    // TODO(jimmyshiu@): Need to be removed once all powerhint.json up-to-date.
+    std::unordered_map<std::string, std::shared_ptr<AdpfConfig>> tag_profile_map_;
     uint32_t adpf_index_;
     std::optional<std::string> gpu_sysfs_config_path_;
 
     static std::unique_ptr<HintManager> sInstance;
+
+    // Hint Update Callback
+    void OnNodeUpdate(const std::string &name, const std::string &path, const std::string &value);
+    // set ADPF config by hint name.
+    std::unordered_map<std::string, std::vector<AdpfCallback *>> tag_update_callback_list_;
 };
 
 }  // namespace perfmgr

@@ -40,6 +40,7 @@ using aidl::android::hardware::power::BnPowerHintSession;
 using ::android::Message;
 using ::android::MessageHandler;
 using ::android::sp;
+using ::android::perfmgr::AdpfConfig;
 using std::chrono::milliseconds;
 using std::chrono::nanoseconds;
 using std::chrono::steady_clock;
@@ -69,6 +70,7 @@ class PowerHintSession : public BnPowerHintSession, public Immobile {
 
     void dumpToStream(std::ostream &stream);
     SessionTag getSessionTag() const;
+    void setAdpfProfile(const std::shared_ptr<AdpfConfig> profile);
 
   private:
     // In practice this lock should almost never get contested, but it's necessary for FMQ
@@ -76,12 +78,16 @@ class PowerHintSession : public BnPowerHintSession, public Immobile {
     bool isTimeout() REQUIRES(mPowerHintSessionLock);
     // Is hint session for a user application
     bool isAppSession() REQUIRES(mPowerHintSessionLock);
-    void tryToSendPowerHint(std::string hint) REQUIRES(mPowerHintSessionLock);
+    void tryToSendPowerHint(std::string hint);
     void updatePidControlVariable(int pidControlVariable, bool updateVote = true)
             REQUIRES(mPowerHintSessionLock);
     int64_t convertWorkDurationToBoostByPid(const std::vector<WorkDuration> &actualDurations)
             REQUIRES(mPowerHintSessionLock);
-    bool updateHeuristicBoost() REQUIRES(mPowerHintSessionLock);
+    SessionJankyLevel updateSessionJankState(SessionJankyLevel oldState, int32_t numOfJankFrames,
+                                             double durationVariance, bool isLowFPS)
+            REQUIRES(mPowerHintSessionLock);
+    void updateHeuristicBoost() REQUIRES(mPowerHintSessionLock);
+    const std::shared_ptr<AdpfConfig> getAdpfProfile() const;
 
     // Data
     PowerSessionManagerT *mPSManager;
@@ -94,14 +100,17 @@ class PowerHintSession : public BnPowerHintSession, public Immobile {
     time_point<steady_clock> mLastUpdatedTime GUARDED_BY(mPowerHintSessionLock);
     bool mSessionClosed GUARDED_BY(mPowerHintSessionLock) = false;
     // Are cpu load change related hints are supported
-    std::unordered_map<std::string, std::optional<bool>> mSupportedHints
-            GUARDED_BY(mPowerHintSessionLock);
+    std::unordered_map<std::string, std::optional<bool>> mSupportedHints;
     // Use the value of the last enum in enum_range +1 as array size
     std::array<bool, enum_size<SessionMode>()> mModes GUARDED_BY(mPowerHintSessionLock){};
     // Tag labeling what kind of session this is
     const SessionTag mTag;
+    std::shared_ptr<AdpfConfig> mAdpfProfile;
+    std::function<void(const std::shared_ptr<AdpfConfig>)> mOnAdpfUpdate;
     std::unique_ptr<SessionRecords> mSessionRecords GUARDED_BY(mPowerHintSessionLock) = nullptr;
     bool mHeuristicBoostActive GUARDED_BY(mPowerHintSessionLock){false};
+    SessionJankyLevel mJankyLevel GUARDED_BY(mPowerHintSessionLock){SessionJankyLevel::LIGHT};
+    uint32_t mJankyFrameNum GUARDED_BY(mPowerHintSessionLock){0};
 };
 
 }  // namespace pixel

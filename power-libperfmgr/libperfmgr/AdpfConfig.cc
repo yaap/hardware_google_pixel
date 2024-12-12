@@ -66,11 +66,14 @@ void AdpfConfig::dumpToFd(int fd) {
     dump_buf << "mGpuCapacityLoadUpHeadroom: " << mGpuCapacityLoadUpHeadroom << "\n";
     if (mHeuristicBoostOn.has_value()) {
         dump_buf << "HeuristicBoost_On: " << mHeuristicBoostOn.value() << "\n";
-        dump_buf << "HBoostOnMissedCycles: " << mHBoostOnMissedCycles.value() << "\n";
-        dump_buf << "HBoostOffMaxAvgRatio: " << mHBoostOffMaxAvgRatio.value() << "\n";
-        dump_buf << "HBoostOffMissedCycles: " << mHBoostOffMissedCycles.value() << "\n";
-        dump_buf << "HBoostPidPuFactor: " << mHBoostPidPuFactor.value() << "\n";
-        dump_buf << "HBoostUclampMin: " << mHBoostUclampMin.value() << "\n";
+        dump_buf << "HBoostModerateJankThreshold: " << mHBoostModerateJankThreshold.value() << "\n";
+        dump_buf << "HBoostOffMaxAvgDurRatio: " << mHBoostOffMaxAvgDurRatio.value() << "\n";
+        dump_buf << "HBoostSevereJankPidPu: " << mHBoostSevereJankPidPu.value() << "\n";
+        dump_buf << "HBoostSevereJankThreshold: " << mHBoostSevereJankThreshold.value() << "\n";
+        dump_buf << "HBoostUclampMinCeilingRange: [" << mHBoostUclampMinCeilingRange.value().first;
+        dump_buf << ", " << mHBoostUclampMinCeilingRange.value().second << "]\n";
+        dump_buf << "HBoostUclampMinFloorRange: [" << mHBoostUclampMinFloorRange.value().first;
+        dump_buf << ", " << mHBoostUclampMinFloorRange.value().second << "]\n";
         dump_buf << "JankCheckTimeFactor: " << mJankCheckTimeFactor.value() << "\n";
         dump_buf << "LowFrameRateThreshold: " << mLowFrameRateThreshold.value() << "\n";
         dump_buf << "MaxRecordsNum: " << mMaxRecordsNum.value() << "\n";

@@ -164,9 +164,11 @@ class UeventListener {
                                                     GpuEvent_GpuEventInfo_MALI_PMODE_ENTRY_FAILURE},
                     {"GPU_PAGE_FAULT",
                      PixelAtoms::GpuEvent::GpuEventInfo::GpuEvent_GpuEventInfo_MALI_GPU_PAGE_FAULT},
-                    {"MMU_AS_ACTIVE_STUCK",
+                    {"MMU_AS_ACTIVE_STUCK", PixelAtoms::GpuEvent::GpuEventInfo::
+                                                    GpuEvent_GpuEventInfo_MALI_MMU_AS_ACTIVE_STUCK},
+                    {"TRACE_BUF_INVALID_SLOT",
                      PixelAtoms::GpuEvent::GpuEventInfo::
-                             GpuEvent_GpuEventInfo_MALI_MMU_AS_ACTIVE_STUCK}};
+                             GpuEvent_GpuEventInfo_MALI_TRACE_BUF_INVALID_SLOT}};
 
     const std::unordered_map<std::string,
                              PixelAtoms::ThermalSensorAbnormalityDetected::AbnormalityType>

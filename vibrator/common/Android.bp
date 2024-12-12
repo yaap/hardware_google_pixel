@@ -33,6 +33,7 @@ soong_config_string_variable {
     values: [
         "luxshare_ict_081545",
         "luxshare_ict_lt_xlra1906d",
+        "legacy_zlra_actuator",
     ],
 }
 
@@ -55,6 +56,11 @@ haptics_feature_cc_defaults {
             luxshare_ict_lt_xlra1906d: {
                 cflags: [
                     "-DLUXSHARE_ICT_LT_XLRA1906D",
+                ],
+            },
+            legacy_zlra_actuator: {
+                cflags: [
+                    "-DLEGACY_ZLRA_ACTUATOR",
                 ],
             },
             conditions_default: {
@@ -166,14 +172,57 @@ cc_library {
         "-DATRACE_TAG=(ATRACE_TAG_VIBRATOR | ATRACE_TAG_HAL)",
         "-DLOG_TAG=\"VibratorStats\"",
     ],
+    static_libs: [
+        "libvibrator_atoms",
+    ],
     shared_libs: [
         "android.frameworks.stats-V2-ndk",
         "libbase",
         "libcutils",
         "libbinder_ndk",
         "liblog",
-        "libprotobuf-cpp-lite",
         "libutils",
-        "pixelatoms-cpp",
+    ],
+}
+
+genrule {
+    name: "vibrator_atoms.h",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --header $(out)" +
+        " --module vibrator" +
+        " --namespace android,hardware,google,pixel,VibratorAtoms" +
+        " --vendor-proto hardware/google/pixel/pixelstats/pixelatoms.proto",
+    out: [
+        "vibrator_atoms.h",
+    ],
+    srcs: [
+        ":pixelatoms_proto",
+    ],
+}
+
+genrule {
+    name: "vibrator_atoms.cpp",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --cpp $(out)" +
+        " --module vibrator" +
+        " --importHeader vibrator_atoms.h" +
+        " --namespace android,hardware,google,pixel,VibratorAtoms" +
+        " --vendor-proto hardware/google/pixel/pixelstats/pixelatoms.proto",
+    out: [
+        "vibrator_atoms.cpp",
+    ],
+    srcs: [
+        ":pixelatoms_proto",
+    ],
+}
+
+cc_library_static {
+    name: "libvibrator_atoms",
+    vendor: true,
+    generated_sources: ["vibrator_atoms.cpp"],
+    generated_headers: ["vibrator_atoms.h"],
+    export_generated_headers: ["vibrator_atoms.h"],
+    shared_libs: [
+        "android.frameworks.stats-V2-ndk",
     ],
 }

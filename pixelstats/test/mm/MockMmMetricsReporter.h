@@ -82,10 +82,30 @@ class MockMmMetricsReporter : public MmMetricsReporter {
             {"/proc/pressure/memory", "psi_memory"},
             {"kswapd0", "kswapd0_stat"},
             {"kcompactd0", "kcompactd0_stat"},
+            {"/proc/vendor_mm/memory_usage_by_oom_score", "oom_mm_usage"},
+            {"/sys/kernel/vendor_mm/gcma/cached", "gcma_cached"},
+            {"/sys/kernel/vendor_mm/gcma/discarded", "gcma_discarded"},
+            {"/sys/kernel/vendor_mm/gcma/evicted", "gcma_evicted"},
+            {"/sys/kernel/vendor_mm/gcma/loaded", "gcma_loaded"},
+            {"/sys/kernel/vendor_mm/gcma/stored", "gcma_stored"},
+            {"/sys/kernel/vendor_mm/gcma/latency_low", "gcma_latency_low"},
+            {"/sys/kernel/vendor_mm/gcma/latency_mid", "gcma_latency_mid"},
+            {"/sys/kernel/vendor_mm/gcma/latency_high", "gcma_latency_high"},
+            {"/sys/kernel/vendor_mm/gcma/latency_extreme_high", "gcma_latency_extreme_high"},
     };
 
     virtual std::string getSysfsPath(const std::string &path) {
-        return base_path_ + "/" + mock_path_map.at(path);
+        std::string ret(base_path_ + '/');
+        if (mock_path_map.find(path) == mock_path_map.end()) {
+            /*
+             * This mapped file won't exist in the test directory,
+             * so this effectively emulates a 'file-not-found' condition
+             * for testing the failed cases.
+             */
+            return ret + "not_found";
+        } else {
+            return ret + mock_path_map.at(path);
+        }
     }
 
     virtual std::string getProcessStatPath(const std::string &name, int *prev_pid) {

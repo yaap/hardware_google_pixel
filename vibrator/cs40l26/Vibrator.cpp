@@ -29,10 +29,12 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <string_view>
 
 #include "DspMemChunk.h"
 #include "Stats.h"
@@ -82,26 +84,6 @@ static constexpr uint32_t MAX_TIME_MS = UINT16_MAX;
 static constexpr auto ASYNC_COMPLETION_TIMEOUT = std::chrono::milliseconds(100);
 static constexpr auto POLLING_TIMEOUT = 50;  // POLLING_TIMEOUT < ASYNC_COMPLETION_TIMEOUT
 static constexpr int32_t COMPOSE_DELAY_MAX_MS = 10000;
-
-// Measured resonant frequency, f0_measured, is represented by Q10.14 fixed
-// point format on cs40l26 devices. The expression to calculate f0 is:
-//   f0 = f0_measured / 2^Q14_BIT_SHIFT
-// See the LRA Calibration Support documentation for more details.
-static constexpr int32_t Q14_BIT_SHIFT = 14;
-
-// Measured ReDC. The LRA series resistance (ReDC), expressed as follows
-// redc(ohms) = redc_measured / 2^Q15_BIT_SHIFT.
-// This value represents the unit-specific ReDC input to the click compensation
-// algorithm. It can be overwritten at a later time by writing to the redc_stored
-// sysfs control.
-// See the LRA Calibration Support documentation for more details.
-static constexpr int32_t Q15_BIT_SHIFT = 15;
-
-// Measured Q factor, q_measured, is represented by Q8.16 fixed
-// point format on cs40l26 devices. The expression to calculate q is:
-//   q = q_measured / 2^Q16_BIT_SHIFT
-// See the LRA Calibration Support documentation for more details.
-static constexpr int32_t Q16_BIT_SHIFT = 16;
 
 static constexpr float PWLE_LEVEL_MIN = 0.0;
 static constexpr float PWLE_LEVEL_MAX = 1.0;
@@ -167,8 +149,51 @@ static std::map<float, float> discretePwleMaxLevels = {};
 std::vector<float> pwleMaxLevelLimitMap(PWLE_BW_MAP_SIZE, 1.0);
 #endif
 
-static float redcToFloat(std::string *caldata) {
-    return static_cast<float>(std::stoul(*caldata, nullptr, 16)) / (1 << Q15_BIT_SHIFT);
+enum class QValueFormat {
+    FORMAT_7_16,  // Q
+    FORMAT_8_15,  // Redc
+    FORMAT_9_14   // F0
+};
+
+static float qValueToFloat(std::string_view qValueInHex, QValueFormat qValueFormat, bool isSigned) {
+    uint32_t intBits = 0;
+    uint32_t fracBits = 0;
+    switch (qValueFormat) {
+        case QValueFormat::FORMAT_7_16:
+            intBits = 7;
+            fracBits = 16;
+            break;
+        case QValueFormat::FORMAT_8_15:
+            intBits = 8;
+            fracBits = 15;
+            break;
+        case QValueFormat::FORMAT_9_14:
+            intBits = 9;
+            fracBits = 14;
+            break;
+        default:
+            ALOGE("Q Format enum not implemented");
+            return std::numeric_limits<float>::quiet_NaN();
+    }
+
+    uint32_t totalBits = intBits + fracBits + (isSigned ? 1 : 0);
+
+    int valInt = 0;
+    std::stringstream ss;
+    ss << std::hex << qValueInHex;
+    ss >> valInt;
+
+    if (ss.fail() || !ss.eof()) {
+        ALOGE("Invalid hex format: %s", qValueInHex.data());
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+
+    // Handle sign extension if necessary
+    if (isSigned && (valInt & (1 << (totalBits - 1)))) {
+        valInt -= 1 << totalBits;
+    }
+
+    return static_cast<float>(valInt) / (1 << fracBits);
 }
 
 Vibrator::Vibrator(std::unique_ptr<HwApi> hwapi, std::unique_ptr<HwCal> hwcal,
@@ -184,12 +209,15 @@ Vibrator::Vibrator(std::unique_ptr<HwApi> hwapi, std::unique_ptr<HwCal> hwcal,
 
     mFfEffects.resize(WAVEFORM_MAX_INDEX);
     mEffectDurations.resize(WAVEFORM_MAX_INDEX);
+    mEffectBrakingDurations.resize(WAVEFORM_MAX_INDEX);
     mEffectDurations = {
 #if defined(UNSPECIFIED_ACTUATOR)
             /* For Z-LRA actuators */
-            1000, 100, 25, 1000, 300, 133, 150, 500, 100, 6, 12, 1000, 13, 5,
+            1000, 100, 25, 1000, 247, 166, 150, 500, 100, 6, 17, 1000, 13, 5,
+#elif defined(LEGACY_ZLRA_ACTUATOR)
+            1000, 100, 25, 1000, 150, 100, 150, 500, 100, 6, 25, 1000, 13, 5,
 #else
-            1000, 100, 12, 1000, 300, 133, 150, 500, 100, 5, 12, 1000, 13, 5,
+            1000, 100, 9, 1000, 300, 133, 150, 500, 100, 5, 12, 1000, 13, 5,
 #endif
     }; /* 11+3 waveforms. The duration must < UINT16_MAX */
     mEffectCustomData.reserve(WAVEFORM_MAX_INDEX);
@@ -222,6 +250,11 @@ Vibrator::Vibrator(std::unique_ptr<HwApi> hwapi, std::unique_ptr<HwCal> hwcal,
             if (mFfEffects[effectIndex].id != effectIndex) {
                 ALOGW("Unexpected effect index: %d -> %d", effectIndex, mFfEffects[effectIndex].id);
             }
+
+            if (mHwApi->hasEffectBrakingTimeBank()) {
+                mHwApi->setEffectBrakingTimeIndex(effectIndex);
+                mHwApi->getEffectBrakingTimeMs(&mEffectBrakingDurations[effectIndex]);
+            }
         } else {
             /* Initiate placeholders for OWT effects. */
             numBytes = effectIndex == WAVEFORM_COMPOSE ? FF_CUSTOM_DATA_LEN_MAX_COMP
@@ -241,8 +274,7 @@ Vibrator::Vibrator(std::unique_ptr<HwApi> hwapi, std::unique_ptr<HwCal> hwcal,
 
     if (mHwCal->getF0(&caldata)) {
         mHwApi->setF0(caldata);
-        mResonantFrequency =
-                static_cast<float>(std::stoul(caldata, nullptr, 16)) / (1 << Q14_BIT_SHIFT);
+        mResonantFrequency = qValueToFloat(caldata, QValueFormat::FORMAT_9_14, false);
     } else {
         mStatsApi->logError(kHwCalError);
         ALOGE("Failed to get resonant frequency (%d): %s, using default resonant HZ: %f", errno,
@@ -251,7 +283,7 @@ Vibrator::Vibrator(std::unique_ptr<HwApi> hwapi, std::unique_ptr<HwCal> hwcal,
     }
     if (mHwCal->getRedc(&caldata)) {
         mHwApi->setRedc(caldata);
-        mRedc = redcToFloat(&caldata);
+        mRedc = qValueToFloat(caldata, QValueFormat::FORMAT_8_15, false);
     }
     if (mHwCal->getQ(&caldata)) {
         mHwApi->setQ(caldata);
@@ -497,7 +529,7 @@ ndk::ScopedAStatus Vibrator::getPrimitiveDuration(CompositePrimitive primitive,
             return status;
         }
 
-        *durationMs = mEffectDurations[effectIndex];
+        *durationMs = mEffectDurations[effectIndex] + mEffectBrakingDurations[effectIndex];
     } else {
         *durationMs = 0;
     }
@@ -509,7 +541,6 @@ ndk::ScopedAStatus Vibrator::compose(const std::vector<CompositeEffect> &composi
     VFTRACE(composite, callback);
     uint16_t size;
     uint16_t nextEffectDelay;
-    uint16_t totalDuration = 0;
 
     mStatsApi->logLatencyStart(kCompositionEffectLatency);
 
@@ -521,7 +552,6 @@ ndk::ScopedAStatus Vibrator::compose(const std::vector<CompositeEffect> &composi
 
     /* Check if there is a wait before the first effect. */
     nextEffectDelay = composite.front().delayMs;
-    totalDuration += nextEffectDelay;
     if (nextEffectDelay > COMPOSE_DELAY_MAX_MS || nextEffectDelay < 0) {
         ALOGE("%s: Invalid delay %u", __func__, nextEffectDelay);
         mStatsApi->logError(kBadCompositeError);
@@ -558,7 +588,6 @@ ndk::ScopedAStatus Vibrator::compose(const std::vector<CompositeEffect> &composi
                 return status;
             }
             effectVolLevel = intensityToVolLevel(e_curr.scale, effectIndex);
-            totalDuration += mEffectDurations[effectIndex];
         }
 
         /* Fetch the next composite effect delay and fill into the current section */
@@ -573,7 +602,6 @@ ndk::ScopedAStatus Vibrator::compose(const std::vector<CompositeEffect> &composi
                 return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
             }
             nextEffectDelay = delay;
-            totalDuration += delay;
         }
 
         if (effectIndex == 0 && nextEffectDelay == 0) {
@@ -581,6 +609,9 @@ ndk::ScopedAStatus Vibrator::compose(const std::vector<CompositeEffect> &composi
             mStatsApi->logError(kBadCompositeError);
             return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
         }
+
+        nextEffectDelay += mEffectBrakingDurations[effectIndex];
+
         mStatsApi->logPrimitive(effectIndex);
         ch.constructComposeSegment(effectVolLevel, effectIndex, 0 /*repeat*/, 0 /*flags*/,
                                    nextEffectDelay /*delay*/);
@@ -819,7 +850,7 @@ ndk::ScopedAStatus Vibrator::getQFactor(float *qFactor) {
         ALOGE("Failed to get q factor (%d): %s", errno, strerror(errno));
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     }
-    *qFactor = static_cast<float>(std::stoul(caldata, nullptr, 16)) / (1 << Q16_BIT_SHIFT);
+    *qFactor = qValueToFloat(caldata, QValueFormat::FORMAT_7_16, false);
 
     return ndk::ScopedAStatus::ok();
 }
@@ -924,7 +955,7 @@ void Vibrator::createBandwidthAmplitudeMap() {
         std::string caldata{8, '0'};
         if (mHwCal->getRedc(&caldata)) {
             mHwApi->setRedc(caldata);
-            mRedc = redcToFloat(&caldata);
+            mRedc = qValueToFloat(caldata, QValueFormat::FORMAT_8_15, false);
         } else {
             mStatsApi->logError(kHwCalError);
             ALOGE("Failed to get resistance value from calibration file");
@@ -1276,11 +1307,11 @@ binder_status_t Vibrator::dump(int fd, const char **args, uint32_t numArgs) {
 
     dprintf(fd, "  FF Effect:\n");
     dprintf(fd, "    Physical Waveform:\n");
-    dprintf(fd, "\tId\tIndex\tt   ->\tt'\n");
+    dprintf(fd, "\tId\tIndex\tt   ->\tt'\tBrake\n");
     for (uint8_t effectId = 0; effectId < WAVEFORM_MAX_PHYSICAL_INDEX; effectId++) {
-        dprintf(fd, "\t%d\t%d\t%d\t%d\n", mFfEffects[effectId].id,
+        dprintf(fd, "\t%d\t%d\t%d\t%d\t%d\n", mFfEffects[effectId].id,
                 mFfEffects[effectId].u.periodic.custom_data[1], mEffectDurations[effectId],
-                mFfEffects[effectId].replay.length);
+                mFfEffects[effectId].replay.length, mEffectBrakingDurations[effectId]);
     }
     dprintf(fd, "    OWT Waveform:\n");
     dprintf(fd, "\tId\tBytes\tData\n");

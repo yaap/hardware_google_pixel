@@ -22,6 +22,7 @@
 #include <android-base/stringprintf.h>
 #include <bootloader_message/bootloader_message.h>
 #include <string.h>
+#include <charconv>
 
 namespace android {
 namespace hardware {
@@ -104,7 +105,7 @@ bool MiscWriter::PerformAction(std::optional<size_t> override_offset) {
         content.resize(32);
         break;
     case MiscWriterActions::kSetSotaConfig:
-        goto sota_config;
+      return UpdateSotaConfig(override_offset);
     case MiscWriterActions::kWriteDstTransition:
         offset = override_offset.value_or(kDstTransitionOffsetInVendorSpace);
         content = std::string(kDstTransition) + stringdata_;
@@ -123,6 +124,11 @@ bool MiscWriter::PerformAction(std::optional<size_t> override_offset) {
                           : std::string(32, 0);
         content.resize(32, 0);
         break;
+    case MiscWriterActions::kWriteEagleEyePatterns:
+        offset = override_offset.value_or(kEagleEyeOffset);
+        content = stringdata_;
+        content.resize(sizeof(bootloader_message_vendor_t::eagleEye), 0);
+        break;
     case MiscWriterActions::kUnset:
       LOG(ERROR) << "The misc writer action must be set";
       return false;
@@ -133,26 +139,70 @@ bool MiscWriter::PerformAction(std::optional<size_t> override_offset) {
     LOG(ERROR) << "Failed to write " << content << " at offset " << offset << " : " << err;
     return false;
   }
+  return true;
+}
 
-sota_config:
-  if (action_ == MiscWriterActions::kSetSotaFlag || action_ == MiscWriterActions::kSetSotaConfig) {
-    content = ::android::base::GetProperty("persist.vendor.nfc.factoryota.state", "");
-    if (content.size() != 0 && content.size() <= 40) {
-      offset = kSotaStateOffsetInVendorSpace;
-      if (std::string err;
-          !WriteMiscPartitionVendorSpace(content.data(), content.size(), offset, &err)) {
-          LOG(ERROR) << "Failed to write " << content << " at offset " << offset << " : " << err;
-          return false;
-      }
+bool MiscWriter::UpdateSotaConfig(std::optional<size_t> override_offset) {
+  size_t offset = 0;
+  std::string content;
+  std::string err;
+
+  // Update sota state
+  offset = override_offset.value_or(kSotaStateOffsetInVendorSpace);
+  content = ::android::base::GetProperty("persist.vendor.nfc.factoryota.state", "");
+  if (content.size() != 0) {
+    content.resize(sizeof(bootloader_message_vendor_t::sota_client_state));
+    if (!WriteMiscPartitionVendorSpace(content.data(), content.size(), offset, &err)) {
+      LOG(ERROR) << "Failed to write " << content << " at offset " << offset << " : " << err;
+      return false;
     }
-    content = ::android::base::GetProperty("persist.vendor.nfc.factoryota.schedule_shipmode", "");
-    if (content.size() != 0 && content.size() <= 32) {
-      offset = kSotaScheduleShipmodeOffsetInVendorSpace;
-      if (std::string err;
-          !WriteMiscPartitionVendorSpace(content.data(), content.size(), offset, &err)) {
-          LOG(ERROR) << "Failed to write " << content << " at offset " << offset << " : " << err;
-          return false;
+  }
+
+  // Update sota schedule_shipmode
+  offset = override_offset.value_or(kSotaScheduleShipmodeOffsetInVendorSpace);
+  content = ::android::base::GetProperty("persist.vendor.nfc.factoryota.schedule_shipmode", "");
+  if (content.size() != 0) {
+    content.resize(sizeof(bootloader_message_vendor_t::sota_schedule_shipmode));
+    if (!WriteMiscPartitionVendorSpace(content.data(), content.size(), offset, &err)) {
+      LOG(ERROR) << "Failed to write " << content << " at offset " << offset << " : " << err;
+      return false;
+    }
+  }
+
+  // Update sota csku signature
+  offset = override_offset.value_or(offsetof(bootloader_message_vendor_t, sota_csku_signature));
+  std::string signature;
+  signature += ::android::base::GetProperty("persist.vendor.factoryota.signature1", "");
+  signature += ::android::base::GetProperty("persist.vendor.factoryota.signature2", "");
+  signature += ::android::base::GetProperty("persist.vendor.factoryota.signature3", "");
+  if (signature.size() != 0) {
+    LOG(INFO) << "persist.vendor.factoryota.signature=" << signature;
+    if (signature.length() != 2 * sizeof(bootloader_message_vendor_t::sota_csku_signature)) {
+      LOG(ERROR) << "signature.length() should be "
+                << 2 * sizeof(bootloader_message_vendor_t::sota_csku_signature) << " not "
+                << signature.length();
+      return false;
+    }
+    content.resize(sizeof(bootloader_message_vendor_t::sota_csku_signature));
+    // Traslate hex string to bytes
+    for (size_t i = 0; i < 2 * content.size(); i += 2)
+      if (std::from_chars(&signature[i], &signature[i + 2], content[i / 2], 16).ec != std::errc{}) {
+        LOG(ERROR) << "Failed to convert " << signature << " to bytes";
+        return false;
       }
+    if (!WriteMiscPartitionVendorSpace(content.data(), content.size(), offset, &err)) {
+      LOG(ERROR) << "Failed to write signature at offset " << offset << " : " << err;
+      return false;
+    }
+
+    // Update sota csku
+    offset = override_offset.value_or(offsetof(bootloader_message_vendor_t, sota_csku));
+    content = ::android::base::GetProperty("persist.vendor.factoryota.csku", "");
+    content.resize(sizeof(bootloader_message_vendor_t::sota_csku));
+    LOG(INFO) << "persist.vendor.factoryota.csku=" << content;
+    if (!WriteMiscPartitionVendorSpace(content.data(), content.size(), offset, &err)) {
+      LOG(ERROR) << "Failed to write " << content << " at offset " << offset << " : " << err;
+      return false;
     }
   }
 

@@ -1,4 +1,4 @@
-on boot
+on property:vendor.all.modules.ready=1
     wait /sys/class/leds/vibrator/device
 
     mkdir /mnt/vendor/persist/haptics 0770 system system

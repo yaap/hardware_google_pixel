@@ -20,7 +20,6 @@
 #include "PowerSessionManager.h"
 
 #include <android-base/file.h>
-#include <android-base/stringprintf.h>
 #include <log/log.h>
 #include <perfmgr/HintManager.h>
 #include <private/android_filesystem_config.h>
@@ -78,33 +77,13 @@ static int set_uclamp(int tid, UclampRange range) {
 }
 }  // namespace
 
+// TODO(jimmyshiu@): Deprecated. Remove once all powerhint.json up-to-date.
 template <class HintManagerT>
 void PowerSessionManager<HintManagerT>::updateHintMode(const std::string &mode, bool enabled) {
-    if (enabled && mode.compare(0, 8, "REFRESH_") == 0) {
-        if (mode.compare("REFRESH_120FPS") == 0) {
-            mDisplayRefreshRate = 120;
-        } else if (mode.compare("REFRESH_90FPS") == 0) {
-            mDisplayRefreshRate = 90;
-        } else if (mode.compare("REFRESH_60FPS") == 0) {
-            mDisplayRefreshRate = 60;
-        }
+    ALOGD("%s %s:%b", __func__, mode.c_str(), enabled);
+    if (enabled && HintManager::GetInstance()->GetAdpfProfileFromDoHint()) {
+        HintManager::GetInstance()->SetAdpfProfileFromDoHint(mode);
     }
-    if (HintManager::GetInstance()->GetAdpfProfile()) {
-        HintManager::GetInstance()->SetAdpfProfile(mode);
-    }
-}
-
-template <class HintManagerT>
-void PowerSessionManager<HintManagerT>::updateHintBoost(const std::string &boost,
-                                                        int32_t durationMs) {
-    ATRACE_CALL();
-    ALOGV("PowerSessionManager::updateHintBoost: boost: %s, durationMs: %d", boost.c_str(),
-          durationMs);
-}
-
-template <class HintManagerT>
-int PowerSessionManager<HintManagerT>::getDisplayRefreshRate() {
-    return mDisplayRefreshRate;
 }
 
 template <class HintManagerT>
@@ -601,6 +580,30 @@ template <class HintManagerT>
 void PowerSessionManager<HintManagerT>::clear() {
     std::scoped_lock lock(mSessionMapMutex);
     mSessionMap.clear();
+}
+
+template <class HintManagerT>
+void PowerSessionManager<HintManagerT>::updateHboostStatistics(int64_t sessionId,
+                                                               SessionJankyLevel jankyLevel,
+                                                               int32_t numOfFrames) {
+    std::lock_guard<std::mutex> lock(mSessionTaskMapMutex);
+    auto sessValPtr = mSessionTaskMap.findSession(sessionId);
+    if (nullptr == sessValPtr) {
+        return;
+    }
+    switch (jankyLevel) {
+        case SessionJankyLevel::LIGHT:
+            sessValPtr->hBoostModeDist.lightModeFrames += numOfFrames;
+            break;
+        case SessionJankyLevel::MODERATE:
+            sessValPtr->hBoostModeDist.moderateModeFrames += numOfFrames;
+            break;
+        case SessionJankyLevel::SEVERE:
+            sessValPtr->hBoostModeDist.severeModeFrames += numOfFrames;
+            break;
+        default:
+            ALOGW("Unknown janky level during updateHboostStatistics");
+    }
 }
 
 template class PowerSessionManager<>;

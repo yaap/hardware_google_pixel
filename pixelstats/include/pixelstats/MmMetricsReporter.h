@@ -36,13 +36,59 @@ using aidl::android::frameworks::stats::VendorAtomValue;
  */
 class MmMetricsReporter {
   public:
+    // Define the enum based on the group range names
+    enum OomScoreAdjGroup : int32_t {
+        OOMR_950 = 0,
+        OOMR_900,
+        OOMR_850,
+        OOMR_800,
+        OOMR_750,
+        OOMR_700,
+        OOMR_650,
+        OOMR_600,
+        OOMR_550,
+        OOMR_500,
+        OOMR_450,
+        OOMR_400,
+        OOMR_350,
+        OOMR_300,
+        OOMR_250,
+        OOMR_200,
+        OOMS_200,
+        OOMR_150,
+        OOMR_100,
+        OOMR_050,
+        OOMR_000,
+        OOMS_000,
+        OOMR_NEGATIVE,
+        OOM_NUM_OF_GROUPS,
+    };
+
+    struct OomGroupMemUsage {
+        OomScoreAdjGroup oom_group;  // the diemsion field
+        int64_t nr_task;
+        int64_t file_rss_kb;
+        int64_t anon_rss_kb;
+        int64_t pgtable_kb;
+        int64_t swap_ents_kb;
+        int64_t shmem_rss_kb;
+    };
+
     MmMetricsReporter();
     void aggregatePixelMmMetricsPer5Min();
     void logPixelMmMetricsPerHour(const std::shared_ptr<IStats> &stats_client);
     void logPixelMmMetricsPerDay(const std::shared_ptr<IStats> &stats_client);
+    void logGcmaPerDay(const std::shared_ptr<IStats> &stats_client);
+    void logGcmaPerHour(const std::shared_ptr<IStats> &stats_client);
+    void logMmProcessUsageByOomGroupSnapshot(const std::shared_ptr<IStats> &stats_client);
     void logCmaStatus(const std::shared_ptr<IStats> &stats_client);
     std::vector<VendorAtomValue> genPixelMmMetricsPerHour();
     std::vector<VendorAtomValue> genPixelMmMetricsPerDay();
+    bool readMmProcessUsageByOomGroup(std::vector<OomGroupMemUsage> *ogusage);
+    std::vector<VendorAtomValue> genMmProcessUsageByOomGroupSnapshotAtom(
+            const OomGroupMemUsage &data);
+    std::vector<VendorAtomValue> readAndGenGcmaPerHour();
+    std::vector<VendorAtomValue> readAndGenGcmaPerDay();
     virtual ~MmMetricsReporter() {}
 
   private:
@@ -119,8 +165,12 @@ class MmMetricsReporter {
             kPsiNumAllUploadTotalMetrics + kPsiNumAllUploadAvgMetrics;
 
     bool checkKernelMMMetricSupport();
+    bool checkKernelOomUsageSupport();
+    bool checkKernelGcmaSupport();
 
     bool MmMetricsSupported() { return ker_mm_metrics_support_; }
+    bool OomUsageSupoorted() { return ker_oom_usage_support_; }
+    bool GcmaSupported() { return ker_gcma_support_; }
 
     bool ReadFileToUint(const std::string &path, uint64_t *val);
     bool reportVendorAtom(const std::shared_ptr<IStats> &stats_client, int atom_id,
@@ -167,7 +217,12 @@ class MmMetricsReporter {
             int cma_name_offset, const std::vector<MmMetricsInfo> &metrics_info,
             std::map<std::string, std::map<std::string, uint64_t>> *all_prev_cma_stat);
 
+    std::optional<OomGroupMemUsage> parseMmProcessUsageByOomGroupLine(const std::string &line);
+    bool readMmProcessUsageByOomGroupFile(const std::string &path,
+                                          std::vector<OomGroupMemUsage> *ogusage, int32_t *m_uid);
+
     // test code could override this to inject test data
+    // though named 'Sysfs', it can be applied to proc fs
     virtual std::string getSysfsPath(const std::string &path) { return path; }
 
     const char *const kVmstatPath;
@@ -179,6 +234,28 @@ class MmMetricsReporter {
     const char *const kPixelStatMm;
     const char *const kMeminfoPath;
     const char *const kProcStatPath;
+    const char *const kProcVendorMmUsageByOom;
+    const char *const kGcmaBasePath;
+
+    // GCMA hourly metrics
+    const char *const kGcmaCached = "cached";
+
+    // GCMA hourly 1/2
+    const char *const kGcmaHourlySimpleKnobs[4] = {
+            "discarded",
+            "evicted",
+            "loaded",
+            "stored",
+    };
+
+    // GCMA hourly 2/2
+    const char *const kGcmaHourlyHistogramKnobs[4] = {
+            "latency_low",
+            "latency_mid",
+            "latency_high",
+            "latency_extreme_high",
+    };
+
     // Proto messages are 1-indexed and VendorAtom field numbers start at 2, so
     // store everything in the values array at the index of the field number
     // -2.
@@ -202,7 +279,10 @@ class MmMetricsReporter {
     int prev_kcompactd_pid_ = -1;
     uint64_t prev_kswapd_stime_ = 0;
     uint64_t prev_kcompactd_stime_ = 0;
+    int32_t oom_usage_uid_ = 0;
     bool ker_mm_metrics_support_;
+    bool ker_oom_usage_support_;
+    bool ker_gcma_support_;
 };
 
 }  // namespace pixel

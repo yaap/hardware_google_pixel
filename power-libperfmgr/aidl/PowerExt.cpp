@@ -47,9 +47,16 @@ ndk::ScopedAStatus PowerExt::setMode(const std::string &mode, bool enabled) {
     } else {
         HintManager::GetInstance()->EndHint(mode);
     }
-    if (HintManager::GetInstance()->GetAdpfProfile() &&
-        HintManager::GetInstance()->GetAdpfProfile()->mReportingRateLimitNs > 0) {
+    if (HintManager::GetInstance()->IsAdpfSupported()) {
         PowerSessionManager<>::getInstance()->updateHintMode(mode, enabled);
+    }
+
+    if (mode == "DISPLAY_IDLE" && mDisplayLowPower->IsAAModeOn()) {
+        if (enabled) {
+            HintManager::GetInstance()->DoHint("DISPLAY_IDLE_AA");
+        } else {
+            HintManager::GetInstance()->EndHint("DISPLAY_IDLE_AA");
+        }
     }
 
     return ndk::ScopedAStatus::ok();
@@ -68,10 +75,6 @@ ndk::ScopedAStatus PowerExt::isModeSupported(const std::string &mode, bool *_aid
 
 ndk::ScopedAStatus PowerExt::setBoost(const std::string &boost, int32_t durationMs) {
     LOG(DEBUG) << "PowerExt setBoost: " << boost << " duration: " << durationMs;
-    if (HintManager::GetInstance()->GetAdpfProfile() &&
-        HintManager::GetInstance()->GetAdpfProfile()->mReportingRateLimitNs > 0) {
-        PowerSessionManager<>::getInstance()->updateHintBoost(boost, durationMs);
-    }
 
     if (durationMs > 0) {
         HintManager::GetInstance()->DoHint(boost, std::chrono::milliseconds(durationMs));

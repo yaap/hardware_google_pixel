@@ -28,6 +28,7 @@ namespace google {
 namespace pixel {
 
 using aidl::android::frameworks::stats::IStats;
+using aidl::android::frameworks::stats::VendorAtomValue;
 
 // The storage for save whole history is 928 byte
 // each history contains 19 items with total size 28 byte
@@ -121,8 +122,9 @@ class BatteryEEPROMReporter {
     /* The number of elements in struct BatteryHistory for P20 series */
     const int kNumBatteryHistoryFields = 19;
     /* The number of elements for relaxation event */
-    const int kNumFGLearningFields = 10;
     const int kNumFGLearningFieldsV2 = 16;
+    /* with additional unix time field */
+    const int kNumFGLearningFieldsV3 = 17;
     unsigned int last_lh_check_ = 0;
     /* The number of elements for history validation event */
     const int kNumValidationFields = 4;
@@ -145,12 +147,41 @@ class BatteryEEPROMReporter {
         unsigned maxdischgcurr:4;
     };
 
+    struct BatteryHistoryInt32 {
+        int32_t cycle_cnt;
+        int32_t full_cap;
+        int32_t esr;
+        int32_t rslow;
+        int32_t soh;
+        int32_t batt_temp;
+        int32_t cutoff_soc;
+        int32_t cc_soc;
+        int32_t sys_soc;
+        int32_t msoc;
+        int32_t batt_soc;
+        int32_t reserve;
+        int32_t max_temp;
+        int32_t min_temp;
+        int32_t max_vbatt;
+        int32_t min_vbatt;
+        int32_t max_ibatt;
+        int32_t min_ibatt;
+        int32_t checksum;
+        int32_t tempco;
+        int32_t rcomp0;
+        int32_t timer_h;
+        int32_t full_rep;
+    };
+
     int64_t report_time_ = 0;
     int64_t getTimeSecs();
 
     bool checkLogEvent(struct BatteryHistory hist);
     void reportEvent(const std::shared_ptr<IStats> &stats_client,
                      const struct BatteryHistory &hist);
+    void reportEventInt32(const std::shared_ptr<IStats> &stats_client,
+                     const struct BatteryHistoryInt32 &hist);
+    void setAtomFieldValue(std::vector<VendorAtomValue> *values, int offset, int content);
 
     const int kNum77759GMSRFields = 11;
     const int kNum77779GMSRFields = 9;

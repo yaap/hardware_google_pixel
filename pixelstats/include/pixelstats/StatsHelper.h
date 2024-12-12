@@ -42,7 +42,7 @@ enum ReportEventType {
 enum ReportEventFormat {
   FormatAddrWithVal,
   FormatIgnoreAddr,
-  FormatNoAddr,
+  FormatOnlyVal,
 };
 
 void reportSpeakerImpedance(const std::shared_ptr<IStats> &stats_client,
@@ -70,11 +70,8 @@ void reportUsbDataSessionEvent(const std::shared_ptr<IStats> &stats_client,
                                const PixelAtoms::VendorUsbDataSessionEvent &usb_session);
 void readLogbuffer(const std::string &buf_path, int num_fields, uint16_t code,
                    enum ReportEventFormat format, unsigned int last_check_time,
-                   std::vector<std::vector<uint16_t>> &events);
+                   std::vector<std::vector<uint32_t>> &events);
 
-void readLogbuffer(const std::string &buf_path, int num_fields, const char *code,
-                   enum ReportEventFormat format, unsigned int last_check_time,
-                   std::vector<std::vector<uint16_t>> &events);
 }  // namespace pixel
 }  // namespace google
 }  // namespace hardware

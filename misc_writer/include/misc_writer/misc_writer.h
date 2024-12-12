@@ -47,6 +47,7 @@ enum class MiscWriterActions : int32_t {
   kWriteDstOffset,
   kSetDisplayMode,
   kClearDisplayMode,
+  kWriteEagleEyePatterns,
 
   kUnset = -1,
 };
@@ -70,6 +71,10 @@ class MiscWriter {
         char dsttransition[32];
         char dstoffset[32];
         char user_preferred_resolution[32];
+        char sota_csku[8];
+        char sota_csku_signature[96];
+        char eagleEye[2000];
+        char skipUnbootableCheck[32];
     } __attribute__((__packed__)) bootloader_message_vendor_t;
 
     static constexpr uint32_t kThemeFlagOffsetInVendorSpace =
@@ -115,6 +120,8 @@ class MiscWriter {
     static constexpr uint32_t kDisplayModeOffsetInVendorSpace =
             offsetof(bootloader_message_vendor_t, user_preferred_resolution);
     static constexpr char kDisplayModePrefix[] = "mode=";
+    static constexpr uint32_t kEagleEyeOffset =
+            offsetof(bootloader_message_vendor_t, eagleEye);
 
     // Minimum and maximum valid value for max-ram-size
     static constexpr int32_t kRamSizeDefault = -1;
@@ -144,6 +151,7 @@ class MiscWriter {
     // Performs the stored MiscWriterActions. If |override_offset| is set, writes to the input
     // offset in the vendor space of /misc instead of the default offset.
     bool PerformAction(std::optional<size_t> override_offset = std::nullopt);
+    bool UpdateSotaConfig(std::optional<size_t> override_offset = std::nullopt);
 
   private:
     MiscWriterActions action_{MiscWriterActions::kUnset};
