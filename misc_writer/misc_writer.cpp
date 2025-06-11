@@ -129,6 +129,10 @@ bool MiscWriter::PerformAction(std::optional<size_t> override_offset) {
         content = stringdata_;
         content.resize(sizeof(bootloader_message_vendor_t::eagleEye), 0);
         break;
+    case MiscWriterActions::kWipeFloodStatus:
+        offset = override_offset.value_or(kFloodOffset);
+        content = std::string(2, 0);
+        break;
     case MiscWriterActions::kSetDisableFaceauthEval:
     case MiscWriterActions::kClearDisableFaceauthEval:
         offset = override_offset.value_or(kFaceauthEvalValOffsetInVendorSpace);
@@ -136,6 +140,10 @@ bool MiscWriter::PerformAction(std::optional<size_t> override_offset) {
                           ? kDisableFaceauthEvalFlag
                           : std::string(32, 0);
         content.resize(32, 0);
+        break;
+    case MiscWriterActions::kSetSotaBootFlag:
+        offset = override_offset.value_or(kSotaBootOffsetInVendorSpace);
+        content = kSotaBoot;
         break;
     case MiscWriterActions::kUnset:
       LOG(ERROR) << "The misc writer action must be set";
@@ -147,6 +155,18 @@ bool MiscWriter::PerformAction(std::optional<size_t> override_offset) {
     LOG(ERROR) << "Failed to write " << content << " at offset " << offset << " : " << err;
     return false;
   }
+
+#if ENABLE_SOTA_BOOT
+  if (action_ == MiscWriterActions::kSetSotaFlag) {
+    offset = override_offset.value_or(kSotaBootOffsetInVendorSpace);
+    content = kSotaBoot;
+    if (std::string err;
+      !WriteMiscPartitionVendorSpace(content.data(), content.size(), offset, &err)) {
+    LOG(ERROR) << "Failed to write " << content << " at offset " << offset << " : " << err;
+    return false;
+    }
+  }
+#endif //ENABLE_SOTA_BOOT
   return true;
 }
 

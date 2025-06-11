@@ -129,6 +129,7 @@ message Atom {
       BatteryTimeToFullStatsReported battery_time_to_full_stats_reported = 105074;
       VendorAudioDirectUsbAccessUsageStats vendor_audio_direct_usb_access_usage_stats = 105075 [(android.os.statsd.module) = "pixelaudio"];
       VendorAudioUsbConfigStats vendor_audio_usb_config_stats = 105076 [(android.os.statsd.module) = "pixelaudio"];
+      GpuFrequencyTimeInStatePerUidReported gpu_frequency_time_in_state_per_uid_reported = 105077;
       GpuFrozenAppsMemoryPerUid gpu_frozen_apps_memory_per_uid = 105078;
       RepairModeEntered repair_mode_entered = 105079;
       RepairModeExited repair_mode_exited = 105080;
@@ -143,6 +144,9 @@ message Atom {
       WaterEventReported water_event_reported = 105089;
       MediaPlaybackUsageStatsReported media_playback_usage_stats_reported = 105090 [(android.os.statsd.module) = "pixelaudio"];
       CallUsageStatsReported call_usage_stats_reported = 105091 [(android.os.statsd.module) = "pixelaudio"];
+      BatteryFirmwareUpdateReported battery_firmware_update_reported = 105092;
+      PowerFifoDump power_fifo_dump = 105093 [(android.os.statsd.module) = "pixelpower"];
+      GnssTtffReported gnss_ttff_reported = 105094 [(android.os.statsd.module) = "pixelgnss"];
     }
     // AOSP atom ID range ends at 109999
     reserved 109997; // reserved for VtsVendorAtomJavaTest test atom
@@ -191,6 +195,8 @@ message ChargeStats {
         ADAPTER_TYPE_EXT_UNKNOWN = 29;
         ADAPTER_TYPE_USB_UNKNOWN = 30;
         ADAPTER_TYPE_WLC_UNKNOWN = 31;
+        ADAPTER_TYPE_WPC_MPP = 32;
+        ADAPTER_TYPE_WPC_MPP25 = 33;
     }
     optional string reverse_domain_name = 1;
     /* Type of charge adapter, enumerated above. */
@@ -513,6 +519,7 @@ message CitadelEvent {
     UPGRADED = 3;
     ALERT_V2 = 4;
     SEC_CH_STATE = 5;
+    ALERT_V3 = 6;
   };
   optional string reverse_domain_name = 1;
   optional Event event = 2;
@@ -560,6 +567,44 @@ message CitadelEvent {
   // SEC_CH_STATE-specific filed. This field corresponds to the state
   // of GSA-GSC secure channel.
   optional int32 sec_ch_state = 23;
+
+  // Added ALERT_V3 specific fields
+
+  // bitmask of all the alerts that occurred.
+  repeated bool alert_bitmask = 24;
+
+  // For V3 alerts there are 3 types of alerts - alerts of different types
+  // differ in how they are handled on GSC, with there being 3 types:
+  //  1. Informational - alerts that are not handled
+  //  2. Recoverable - alerts that are handled but SW
+  //  3. Fatal - alert cannot be handled by SW and always reset the chip
+  //  4. Reserved - alert type is not being used right now, may be
+  //     assigned in the future
+
+  // Alert types - used to index into the following fields.
+  enum AlertV3Types {
+    INFORMATIONAL = 0;
+    RECOVERABLE = 1;
+    FATAL = 2;
+    RESERVED = 3;
+  };
+
+  // Amount of time that alerts from each type must be handled in before
+  // escalation occurs.
+  repeated int64 type_escalation_ctrs = 25;
+  // Number of alerts that have occurred for each alert type.
+  repeated int32 type_cnts = 26;
+  // Escalation level for each alert type. A higher escalation level corresponds
+  // to greater severity and need for handling by SW/HW.
+  repeated int32 type_escalation_levels = 27;
+
+  // Invidivual alert fields. Information from single alerts are grouped by
+  // index.
+
+  // Cause of alerts
+  repeated int64 alert_causes = 28;
+  // ID of alerts
+  repeated int32 alerts = 29;
 }
 
 /* A message containing the citadel firmware version. */
@@ -1993,6 +2038,8 @@ message GpuEvent {
       MALI_TYPE_NONE = 0;
       MALI_KMD_ERROR = 1;
       MALI_GPU_RESET = 2;
+      /* Reserving up to 9 for mali event types */
+      PVR_KMD_ERROR = 10;
     }
     enum GpuEventInfo {
       MALI_INFO_NONE = 0;
@@ -2020,6 +2067,11 @@ message GpuEvent {
       MALI_GPU_PAGE_FAULT = 22;
       MALI_MMU_AS_ACTIVE_STUCK = 23;
       MALI_TRACE_BUF_INVALID_SLOT = 24;
+      /* Reserving up to 49 for mali event info */
+      PVR_INFO_NONE = 50;
+      PVR_FW_PAGEFAULT = 51;
+      PVR_HOST_WDG_FW_ERROR = 52;
+      PVR_GUILTY_LOCKUP = 53;
     }
 
     /* Vendor reverse domain name (expecting "com.google.pixel"). */
@@ -2724,6 +2776,87 @@ message VendorAudioUsbConfigStats {
   optional int32 duration_second = 7;
 };
 
+/*
+ * Per-app GPU DVFS time-in-state data, for each GPU frequency.
+ * Logging is capped at 15 apps/uids max, per 6 hours.
+ * Logged from:
+ *   hardware/google/pixel/pixelstats/
+ *
+ * See: b/341045478, b/340834608
+ *
+ * Estimated Logging Rate:
+ * Peak: 15 times in 6 hours | Avg: 15 times in 6 hours
+ */
+message GpuFrequencyTimeInStatePerUidReported {
+  /* Vendor reverse domain name (expecting "com.google.pixel"). */
+  optional string reverse_domain_name = 1;
+
+  /* App UID. */
+  optional int32 uid = 2 [(android.os.statsd.is_uid) = true];
+
+  /*
+   * Time passed, since the previous push of this atom for this uid, in
+   * milliseconds.
+   */
+  optional int32 reporting_duration_ms = 3;
+
+  /*
+   * Report up to 15 different frequencies, and how much time was spent in each
+   * frequency, by this app/uid since the previous push of this atom.
+   * Frequencies are given in KHz, and time is given in milliseconds since the
+   * previous push of this atom.
+   * Each individual device will always report the same frequency in the same
+   * field (for the aggregation in the metric(s) to work). If a frequency had 0
+   * time spent in it (since the previous atom push) for an app/uid - both
+   * frequency and duration fields for that frequency will not be set (to save
+   * space).
+   */
+  optional int32 frequency_1_khz = 4;
+  optional int32 time_1_millis = 5;
+
+  optional int32 frequency_2_khz = 6;
+  optional int32 time_2_millis = 7;
+
+  optional int32 frequency_3_khz = 8;
+  optional int32 time_3_millis = 9;
+
+  optional int32 frequency_4_khz = 10;
+  optional int32 time_4_millis = 11;
+
+  optional int32 frequency_5_khz = 12;
+  optional int32 time_5_millis = 13;
+
+  optional int32 frequency_6_khz = 14;
+  optional int32 time_6_millis = 15;
+
+  optional int32 frequency_7_khz = 16;
+  optional int32 time_7_millis = 17;
+
+  optional int32 frequency_8_khz = 18;
+  optional int32 time_8_millis = 19;
+
+  optional int32 frequency_9_khz = 20;
+  optional int32 time_9_millis = 21;
+
+  optional int32 frequency_10_khz = 22;
+  optional int32 time_10_millis = 23;
+
+  optional int32 frequency_11_khz = 24;
+  optional int32 time_11_millis = 25;
+
+  optional int32 frequency_12_khz = 26;
+  optional int32 time_12_millis = 27;
+
+  optional int32 frequency_13_khz = 28;
+  optional int32 time_13_millis = 29;
+
+  optional int32 frequency_14_khz = 30;
+  optional int32 time_14_millis = 31;
+
+  optional int32 frequency_15_khz = 32;
+  optional int32 time_15_millis = 33;
+}
+
 /* GPU memory allocation information for frozen apps */
 message GpuFrozenAppsMemoryPerUid {
   /* Vendor reverse domain name (expecting "com.google.pixel"). */
@@ -3101,6 +3234,38 @@ message MediaPlaybackUsageStatsReported {
 
   /* Average power in milliwatts. -1 if unavailable. */
   optional float average_power = 11;
+
+  /* Sample rate used in the media playback. */
+  optional int32 sample_rate = 12;
+
+  /* Sample rate used in the media playback. */
+  optional int32 channel_count = 13;
+
+  /* Sample rate used in the media playback. */
+  optional int32 audio_format_type = 14;
+
+  /* Sample rate used in the media playback. */
+  optional int32 pcm_type = 15;
+
+  enum OffloadEncoding {
+    UNKNOWN_ENCODING = 0;
+    NO_ENCODING = 1;
+    PCM_UINT_8_BIT = 2;
+    PCM_INT_16_BIT = 3;
+    PCM_INT_24_BIT = 4;
+    PCM_FIXED_Q_8_24 = 5;
+    PCM_INT_32_BIT = 6;
+    PCM_FLOAT_32_BIT = 7;
+    MP3 = 8;
+    AAC = 9;
+    AAC_LC = 10;
+    AAC_HE_V1 = 11;
+    AAC_HE_V2 = 12;
+    OPUS = 13;
+  }
+
+  /* Offload Encoding used in the media playback. */
+  optional OffloadEncoding offload_encoding = 16;
 }
 
 /*
@@ -3145,7 +3310,12 @@ message CallUsageStatsReported {
   optional float average_power = 11;
 
   /* background noise level from 1 (lowest) to 12 (highest). */
-  optional float noise_level = 12;
+  optional float noise_level = 12 [deprecated = true];
+
+  // durations list of size 12 representing percentage
+  // of duration of each background noise level
+  // from -1 (lowest) to 12 (highest).
+  repeated float noise_level_percentages = 13;
 }
 
 /*
@@ -3265,23 +3435,125 @@ message WaterEventReported {
   /* The state of the reference sensor. */
   optional SensorState reference_state = 4;
   /* The threshold of the reference in mV. */
-  optional int32 reference_threshold = 8;
+  optional int32 reference_threshold_mv = 8 [deprecated = true];
 
   /* The state of sensor 0. */
   optional SensorState sensor0_state = 5;
   /* The threshold of sensor 0 in mV. */
-  repeated int32 sensor0_threshold = 9;
+  repeated int32 sensor0_threshold_mv = 9 [packed = true, deprecated = true];
 
   /* The state of sensor 1. */
   optional SensorState sensor1_state = 6;
   /* The threshold of sensor1 in mv. */
-  repeated int32 sensor1_threshold = 10;
+  repeated int32 sensor1_threshold_mv = 10 [packed = true, deprecated = true];
 
-   /* The state of sensor 2. */
+  /* The state of sensor 2. */
   optional SensorState sensor2_state = 7;
   /* The threshold of the sensor 2 in mv. */
-  repeated int32 sensor2_threshold = 11;
+  repeated int32 sensor2_threshold_mv = 11 [packed = true, deprecated = true];
 
   /* Was system fault enabled */
   optional CircuitState fault_enabled = 12;
+}
+
+/**
+ * A message containing battery related firmware update stats
+ * Logged from:
+ *    hardware/google/pixel/pixelstats/BatteryFwUpdateReporter.cpp
+ */
+message BatteryFirmwareUpdateReported {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+  optional int32 msg_type = 2;
+  optional int32 msg_category = 3;
+  /* current firmware version */
+  optional int32 major_version_from = 4;
+  optional int32 minor_version_from = 5;
+  /* target firmware version */
+  optional int32 major_version_to = 6;
+  optional int32 minor_version_to = 7;
+  optional int32 update_status = 8;
+  optional int32 attempts = 9;
+  optional int32 unix_time_sec = 10;
+  /* additional firmware data */
+  optional int32 fw_data0 = 11;
+  optional int32 fw_data1 = 12;
+  optional int32 fw_data2 = 13;
+  optional int32 fw_data3 = 14;
+}
+
+
+/*
+ * A message containing a list of 30 elements representing the battery history
+ * of milliwatts, and milliwatt durations which can be used to analyze battery
+ * behavior over time. The elements are ordered from oldest to newest.
+ * The history window is not measured in days but rather fluctuates between
+ * 100s of milliseconds and a few minutes based on the device's power state.
+ */
+message PowerFifoDump {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+  /* The estimated milliwatts.*/
+  repeated int32 milliwatts = 2;
+  /* The estimated duration in milliseconds. */
+  repeated int32 duration_ms = 3;
+  /* The elapsed time in milliseconds, from when the final sample was taken. */
+  required int64 elapsed_time_ms = 4;
+}
+
+/*
+ * A message containing a TTFF, aiding data and related satellite information.
+ * Logged from:
+ *   vendor/google/gnss/aidl_service/GnssAtomsReporter.cpp
+ *
+ * Estimated Logging Rate:
+ * Any time that user turn on location function (only first location calculated).
+ * Peak: 1 times in 3 min | Avg: 48 times per device per day
+ */
+message GnssTtffReported {
+  enum TtffType {
+    TTFF_UNKNOWN = 0;
+    TTFF_COLD = 1;
+    TTFF_WARM = 2;
+    TTFF_HOT = 3;
+  }
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+  /* The start type at which each TTFF event was collected. */
+  optional TtffType ttff_type = 2;
+  /* Time To First Fix in milliseconds. */
+  optional int32 ttff_milliseconds = 3;
+  /* Estimated position accuracy (meters). */
+  optional int32 ttff_horizontal_position_accuracy = 4;
+  /* The number of satellites used. */
+  optional int32 ttff_used_in_fix_sv_count = 5;
+  /* The L1 satellite constellations in view. */
+  repeated int32 ttff_l1_constellation_list = 6;
+  /* The L1 satellite PRNs in view. */
+  repeated int32 ttff_l1_prn_list = 7;
+  /* The L1 CN0 for each satellite. */
+  repeated int32 ttff_l1_cn0_list = 8;
+  /* The L5 satellite constellations in view. */
+  repeated int32 ttff_l5_constellation_list = 9;
+  /* The L5 PRN satellite in view. */
+  repeated int32 ttff_l5_prn_list = 10;
+  /* The L5 CN0 for each satelltie. */
+  repeated int32 ttff_l5_cn0_list = 11;
+  /*
+   * Aiding data provided by framework.
+   * Time elapsed since a location request was initiated.
+   * Zero indicates no request/inject was made.
+   */
+  optional int32 reference_location_request_milliseconds = 12;
+  optional int32 reference_location_inject_milliseconds = 13;
+  optional int32 reference_time_request_milliseconds = 14;
+  optional int32 reference_time_inject_milliseconds = 15;
+  optional int32 supl_aiding_request_milliseconds = 16;
+  optional int32 supl_aiding_inject_milliseconds = 17;
+  optional int32 vendor_aiding_request_milliseconds = 18;
+  optional int32 vendor_aiding_inject_milliseconds = 19;
+  /* The aiding data without precise timestamp */
+  optional bool reference_frequency_used = 20;
+  optional bool almanac_used = 21;
+  optional bool ephemeris_used = 22;
 }

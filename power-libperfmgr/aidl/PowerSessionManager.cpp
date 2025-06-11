@@ -21,12 +21,12 @@
 
 #include <android-base/file.h>
 #include <log/log.h>
-#include <perfmgr/HintManager.h>
 #include <private/android_filesystem_config.h>
 #include <processgroup/processgroup.h>
 #include <sys/syscall.h>
 #include <utils/Trace.h>
 
+#include "AdpfTypes.h"
 #include "AppDescriptorTrace.h"
 #include "AppHintDesc.h"
 #include "tests/mocks/MockHintManager.h"
@@ -38,8 +38,8 @@ namespace power {
 namespace impl {
 namespace pixel {
 
-using ::android::perfmgr::HintManager;
 constexpr char kGameModeName[] = "GAME";
+constexpr int32_t kBGRampupVal = 1;
 
 namespace {
 /* there is no glibc or bionic wrapper */
@@ -85,8 +85,8 @@ void PowerSessionManager<HintManagerT>::updateHintMode(const std::string &mode, 
     }
 
     // TODO(jimmyshiu@): Deprecated. Remove once all powerhint.json up-to-date.
-    if (enabled && HintManager::GetInstance()->GetAdpfProfileFromDoHint()) {
-        HintManager::GetInstance()->SetAdpfProfileFromDoHint(mode);
+    if (enabled && HintManagerT::GetInstance()->GetAdpfProfileFromDoHint()) {
+        HintManagerT::GetInstance()->SetAdpfProfileFromDoHint(mode);
     }
 }
 
@@ -99,7 +99,7 @@ template <class HintManagerT>
 void PowerSessionManager<HintManagerT>::addPowerSession(
         const std::string &idString, const std::shared_ptr<AppHintDesc> &sessionDescriptor,
         const std::shared_ptr<AppDescriptorTrace> &sessionTrace,
-        const std::vector<int32_t> &threadIds, const ProcessTag procTag) {
+        const std::vector<int32_t> &threadIds) {
     if (!sessionDescriptor) {
         ALOGE("sessionDescriptor is null. PowerSessionManager failed to add power session: %s",
               idString.c_str());
@@ -112,6 +112,8 @@ void PowerSessionManager<HintManagerT>::addPowerSession(
     sve.idString = idString;
     sve.isActive = sessionDescriptor->is_active;
     sve.isAppSession = sessionDescriptor->uid >= AID_APP_START;
+    sve.tag = sessionDescriptor->tag;
+    sve.procTag = sessionDescriptor->procTag;
     sve.lastUpdatedTime = timeNow;
     sve.votes = std::make_shared<Votes>();
     sve.sessionTrace = sessionTrace;
@@ -128,12 +130,11 @@ void PowerSessionManager<HintManagerT>::addPowerSession(
         ALOGE("sessionTaskMap failed to add power session: %" PRId64, sessionDescriptor->sessionId);
     }
 
-    setThreadsFromPowerSession(sessionDescriptor->sessionId, threadIds, procTag);
+    setThreadsFromPowerSession(sessionDescriptor->sessionId, threadIds);
 }
 
 template <class HintManagerT>
-void PowerSessionManager<HintManagerT>::removePowerSession(int64_t sessionId,
-                                                           const ProcessTag procTag) {
+void PowerSessionManager<HintManagerT>::removePowerSession(int64_t sessionId) {
     // To remove a session we also need to undo the effects the session
     // has on currently enabled votes which means setting vote to inactive
     // and then forceing a uclamp update to occur
@@ -141,6 +142,7 @@ void PowerSessionManager<HintManagerT>::removePowerSession(int64_t sessionId,
 
     std::vector<pid_t> addedThreads;
     std::vector<pid_t> removedThreads;
+    std::string profile = getSessionTaskProfile(sessionId, false);
 
     {
         // Wait till end to remove session because it needs to be around for apply U clamp
@@ -150,19 +152,9 @@ void PowerSessionManager<HintManagerT>::removePowerSession(int64_t sessionId,
         mSessionTaskMap.remove(sessionId);
     }
 
-    if (procTag == ProcessTag::SYSTEM_UI) {
-        for (auto tid : removedThreads) {
-            if (!SetTaskProfiles(tid, {"SCHED_QOS_SENSITIVE_EXTREME_CLEAR"})) {
-                ALOGE("Failed to set SCHED_QOS_SENSITIVE_EXTREME_CLEAR task profile for tid:%d",
-                      tid);
-            }
-        }
-    } else {
-        for (auto tid : removedThreads) {
-            if (!SetTaskProfiles(tid, {"SCHED_QOS_SENSITIVE_STANDARD_CLEAR"})) {
-                ALOGE("Failed to set SCHED_QOS_SENSITIVE_STANDARD_CLEAR task profile for tid:%d",
-                      tid);
-            }
+    for (auto tid : removedThreads) {
+        if (!SetTaskProfiles(tid, {profile})) {
+            ALOGE("Failed to set %s task profile for tid:%d", profile.c_str(), tid);
         }
     }
 
@@ -171,41 +163,26 @@ void PowerSessionManager<HintManagerT>::removePowerSession(int64_t sessionId,
 
 template <class HintManagerT>
 void PowerSessionManager<HintManagerT>::setThreadsFromPowerSession(
-        int64_t sessionId, const std::vector<int32_t> &threadIds, const ProcessTag procTag) {
+        int64_t sessionId, const std::vector<int32_t> &threadIds) {
     std::vector<pid_t> addedThreads;
     std::vector<pid_t> removedThreads;
     forceSessionActive(sessionId, false);
+    std::string profile;
     {
         std::lock_guard<std::mutex> lock(mSessionTaskMapMutex);
         mSessionTaskMap.replace(sessionId, threadIds, &addedThreads, &removedThreads);
     }
-    if (procTag == ProcessTag::SYSTEM_UI) {
-        for (auto tid : addedThreads) {
-            if (!SetTaskProfiles(tid, {"SCHED_QOS_SENSITIVE_EXTREME_SET"})) {
-                ALOGE("Failed to set SCHED_QOS_SENSITIVE_EXTREME_SET task profile for tid:%d", tid);
-            }
-        }
-    } else {
-        for (auto tid : addedThreads) {
-            if (!SetTaskProfiles(tid, {"SCHED_QOS_SENSITIVE_STANDARD_SET"})) {
-                ALOGE("Failed to set SCHED_QOS_SENSITIVE_STANDARD_SET task profile for tid:%d",
-                      tid);
-            }
+
+    profile = getSessionTaskProfile(sessionId, true);
+    for (auto tid : addedThreads) {
+        if (!SetTaskProfiles(tid, {profile})) {
+            ALOGE("Failed to set %s task profile for tid:%d", profile.c_str(), tid);
         }
     }
-    if (procTag == ProcessTag::SYSTEM_UI) {
-        for (auto tid : removedThreads) {
-            if (!SetTaskProfiles(tid, {"SCHED_QOS_SENSITIVE_EXTREME_CLEAR"})) {
-                ALOGE("Failed to set SCHED_QOS_SENSITIVE_EXTREME_CLEAR task profile for tid:%d",
-                      tid);
-            }
-        }
-    } else {
-        for (auto tid : removedThreads) {
-            if (!SetTaskProfiles(tid, {"SCHED_QOS_SENSITIVE_STANDARD_CLEAR"})) {
-                ALOGE("Failed to set SCHED_QOS_SENSITIVE_STANDARD_CLEAR task profile for tid:%d",
-                      tid);
-            }
+    profile = getSessionTaskProfile(sessionId, false);
+    for (auto tid : removedThreads) {
+        if (!SetTaskProfiles(tid, {profile})) {
+            ALOGE("Failed to set %s task profile for tid:%d", profile.c_str(), tid);
         }
     }
     forceSessionActive(sessionId, true);
@@ -220,19 +197,6 @@ std::optional<bool> PowerSessionManager<HintManagerT>::isAnyAppSessionActive() {
                 mSessionTaskMap.isAnyAppSessionActive(std::chrono::steady_clock::now());
     }
     return isAnyAppSessionActive;
-}
-
-template <class HintManagerT>
-void PowerSessionManager<HintManagerT>::updateUniversalBoostMode() {
-    const auto active = isAnyAppSessionActive();
-    if (!active.has_value()) {
-        return;
-    }
-    if (active.value()) {
-        disableSystemTopAppBoost();
-    } else {
-        enableSystemTopAppBoost();
-    }
 }
 
 template <class HintManagerT>
@@ -280,9 +244,14 @@ void PowerSessionManager<HintManagerT>::pause(int64_t sessionId) {
             return;
         }
         sessValPtr->isActive = false;
+        if (sessValPtr->rampupBoostActive) {
+            sessValPtr->rampupBoostActive = false;
+            // TODO(guibing): cancel the per task rampup qos vote instead of voting the
+            // default low value when session gets paused.
+            voteRampupBoostLocked(sessionId, false, kBGRampupVal, kBGRampupVal);
+        }
     }
     applyCpuAndGpuVotes(sessionId, std::chrono::steady_clock::now());
-    updateUniversalBoostMode();
 }
 
 template <class HintManagerT>
@@ -302,7 +271,6 @@ void PowerSessionManager<HintManagerT>::resume(int64_t sessionId) {
         sessValPtr->isActive = true;
     }
     applyCpuAndGpuVotes(sessionId, std::chrono::steady_clock::now());
-    updateUniversalBoostMode();
 }
 
 template <class HintManagerT>
@@ -418,22 +386,6 @@ void PowerSessionManager<HintManagerT>::disableBoosts(int64_t sessionId) {
 }
 
 template <class HintManagerT>
-void PowerSessionManager<HintManagerT>::enableSystemTopAppBoost() {
-    if (HintManagerT::GetInstance()->IsHintSupported(kDisableBoostHintName)) {
-        ALOGV("PowerSessionManager::enableSystemTopAppBoost!!");
-        HintManagerT::GetInstance()->EndHint(kDisableBoostHintName);
-    }
-}
-
-template <class HintManagerT>
-void PowerSessionManager<HintManagerT>::disableSystemTopAppBoost() {
-    if (HintManagerT::GetInstance()->IsHintSupported(kDisableBoostHintName)) {
-        ALOGV("PowerSessionManager::disableSystemTopAppBoost!!");
-        HintManagerT::GetInstance()->DoHint(kDisableBoostHintName);
-    }
-}
-
-template <class HintManagerT>
 void PowerSessionManager<HintManagerT>::handleEvent(const EventSessionTimeout &eventTimeout) {
     bool recalcUclamp = false;
     const auto tNow = std::chrono::steady_clock::now();
@@ -481,7 +433,6 @@ void PowerSessionManager<HintManagerT>::handleEvent(const EventSessionTimeout &e
     // than trying to use the event's timestamp which will be slightly off given
     // the background priority queue introduces latency
     applyCpuAndGpuVotes(eventTimeout.sessionId, tNow);
-    updateUniversalBoostMode();
 }
 
 template <class HintManagerT>
@@ -571,7 +522,6 @@ void PowerSessionManager<HintManagerT>::forceSessionActive(int64_t sessionId, bo
     // that the SessionId remains valid and mapped to the proper threads/tasks
     // which enables apply u clamp to work correctly
     applyCpuAndGpuVotes(sessionId, std::chrono::steady_clock::now());
-    updateUniversalBoostMode();
 }
 
 template <class HintManagerT>
@@ -654,6 +604,106 @@ void PowerSessionManager<HintManagerT>::updateHboostStatistics(int64_t sessionId
             break;
         default:
             ALOGW("Unknown janky level during updateHboostStatistics");
+    }
+}
+
+template <class HintManagerT>
+std::string PowerSessionManager<HintManagerT>::getSessionTaskProfile(int64_t sessionId,
+                                                                     bool isSetProfile) const {
+    auto sessValPtr = mSessionTaskMap.findSession(sessionId);
+    if (isSetProfile) {
+        if (nullptr == sessValPtr) {
+            return "SCHED_QOS_SENSITIVE_STANDARD";
+        }
+        if (sessValPtr->procTag == ProcessTag::SYSTEM_UI) {
+            return "SCHED_QOS_SENSITIVE_EXTREME";
+        } else {
+            switch (sessValPtr->tag) {
+                case SessionTag::SURFACEFLINGER:
+                case SessionTag::HWUI:
+                    return "SCHED_QOS_SENSITIVE_EXTREME";
+                default:
+                    return "SCHED_QOS_SENSITIVE_STANDARD";
+            }
+        }
+    } else {
+        return "SCHED_QOS_NONE";
+    }
+}
+
+template <class HintManagerT>
+bool PowerSessionManager<HintManagerT>::hasValidTaskRampupMultNode() {
+    return mTaskRampupMultNode->isValid();
+}
+
+template <class HintManagerT>
+void PowerSessionManager<HintManagerT>::voteRampupBoostLocked(int64_t sessionId,
+                                                              bool rampupBoostVote,
+                                                              int32_t defaultRampupVal,
+                                                              int32_t highRampupVal) {
+    auto threadIds = mSessionTaskMap.getTaskIds(sessionId);
+    for (auto tid : threadIds) {
+        auto sessionIds = mSessionTaskMap.getSessionIds(tid);
+        // Check the aggregated rampup boost status for all the other sessions.
+        bool otherSessionsRampupBoost = false;
+        for (auto sess : sessionIds) {
+            if (sess != sessionId && mSessionTaskMap.findSession(sess)->rampupBoostActive) {
+                otherSessionsRampupBoost = true;
+                break;
+            }
+        }
+
+        if (!otherSessionsRampupBoost) {
+            if (rampupBoostVote) {
+                if (!mTaskRampupMultNode->updateTaskRampupMult(tid, highRampupVal)) {
+                    ALOGE("Failed to set high rampup boost value for task %d", tid);
+                }
+            } else {
+                if (!mTaskRampupMultNode->updateTaskRampupMult(tid, defaultRampupVal)) {
+                    ALOGE("Failed to reset to default rampup boost value for task %d", tid);
+                }
+            }
+        }
+    }
+}
+
+template <class HintManagerT>
+void PowerSessionManager<HintManagerT>::updateRampupBoostMode(int64_t sessionId,
+                                                              SessionJankyLevel jankyLevel,
+                                                              int32_t defaultRampupVal,
+                                                              int32_t highRampupVal) {
+    std::lock_guard<std::mutex> lock(mSessionTaskMapMutex);
+    auto sessValPtr = mSessionTaskMap.findSession(sessionId);
+    if (nullptr == sessValPtr) {
+        return;
+    }
+    auto lastRampupBoostActive = sessValPtr->rampupBoostActive;
+    if (!sessValPtr->isActive) {
+        sessValPtr->rampupBoostActive = false;
+    } else {
+        switch (jankyLevel) {
+            case SessionJankyLevel::LIGHT:
+                sessValPtr->rampupBoostActive = false;
+                break;
+            case SessionJankyLevel::MODERATE:
+                sessValPtr->rampupBoostActive = true;
+                break;
+            case SessionJankyLevel::SEVERE:
+                sessValPtr->rampupBoostActive = true;
+                break;
+            default:
+                ALOGW("Unknown janky level during updateHboostStatistics");
+        }
+    }
+
+    if (ATRACE_ENABLED()) {
+        ATRACE_INT(sessValPtr->sessionTrace->trace_rampup_boost_active.c_str(),
+                   sessValPtr->rampupBoostActive);
+    }
+
+    if (sessValPtr->rampupBoostActive != lastRampupBoostActive) {
+        voteRampupBoostLocked(sessionId, sessValPtr->rampupBoostActive, defaultRampupVal,
+                              highRampupVal);
     }
 }
 

@@ -19,6 +19,7 @@
 
 #include <aidl/android/frameworks/stats/IStats.h>
 #include <hardware/google/pixel/pixelstats/pixelatoms.pb.h>
+#include <json/reader.h>
 
 #include "BatteryEEPROMReporter.h"
 #include "BatteryHealthReporter.h"
@@ -42,72 +43,11 @@ using android::hardware::google::pixel::PixelAtoms::VendorSlowIo;
 
 class SysfsCollector {
   public:
-    struct SysfsPaths {
-        const char *const SlowioReadCntPath;
-        const char *const SlowioWriteCntPath;
-        const char *const SlowioUnmapCntPath;
-        const char *const SlowioSyncCntPath;
-        const char *const CycleCountBinsPath;
-        const char *const ImpedancePath;
-        const char *const CodecPath;
-        const char *const Codec1Path;
-        const char *const SpeechDspPath;
-        const char *const BatteryCapacityCC;
-        const char *const BatteryCapacityVFSOC;
-        const char *const UFSLifetimeA;
-        const char *const UFSLifetimeB;
-        const char *const UFSLifetimeC;
-        const char *const F2fsStatsPath;
-        const char *const UserdataBlockProp;
-        const char *const ZramMmStatPath;
-        const char *const ZramBdStatPath;
-        const char *const EEPROMPath;
-        const char *const MitigationPath;
-        const char *const MitigationDurationPath;
-        const char *const BrownoutCsvPath;
-        const char *const BrownoutLogPath;
-        const char *const BrownoutReasonProp;
-        const char *const SpeakerTemperaturePath;
-        const char *const SpeakerExcursionPath;
-        const char *const SpeakerHeartBeatPath;
-        const std::vector<std::string> UFSErrStatsPath;
-        const int BlockStatsLength;
-        const char *const AmsRatePath;
-        const std::vector<std::string> ThermalStatsPaths;
-        const std::vector<std::string> DisplayStatsPaths;
-        const std::vector<std::string> DisplayPortStatsPaths;
-        const std::vector<std::string> DisplayPortDSCStatsPaths;
-        const std::vector<std::string> DisplayPortMaxResolutionStatsPaths;
-        const std::vector<std::string> HDCPStatsPaths;
-        const char *const CCARatePath;
-        const std::vector<std::pair<std::string, std::string>> TempResidencyAndResetPaths;
-        const char *const LongIRQMetricsPath;
-        const char *const StormIRQMetricsPath;
-        const char *const IRQStatsResetPath;
-        const char *const ResumeLatencyMetricsPath;
-        const char *const ModemPcieLinkStatsPath;
-        const char *const WifiPcieLinkStatsPath;
-        const char *const PDMStatePath;
-        const char *const WavesPath;
-        const char *const AdaptedInfoCountPath;
-        const char *const AdaptedInfoDurationPath;
-        const char *const PcmLatencyPath;
-        const char *const PcmCountPath;
-        const char *const TotalCallCountPath;
-        const char *const OffloadEffectsIdPath;
-        const char *const OffloadEffectsDurationPath;
-        const char *const BluetoothAudioUsagePath;
-        const std::vector<std::string> GMSRPath;
-        const std::vector<std::string> FGModelLoadingPath;
-        const std::vector<std::string> FGLogBufferPath;
-        const char *const SpeakerVersionPath;
-        const char *const WaterEventPath;
-    };
-
-    SysfsCollector(const struct SysfsPaths &paths);
+    SysfsCollector(const Json::Value& configData);
     void collect();
 
   private:
+    const Json::Value configData;
     bool ReadFileToInt(const std::string &path, int *val);
     bool ReadFileToInt(const char *path, int *val);
     void aggregatePer5Min();
@@ -147,7 +87,7 @@ class SysfsCollector {
     void logHDCPStats(const std::shared_ptr<IStats> &stats_client);
     void logVendorAudioPdmStatsReported(const std::shared_ptr<IStats> &stats_client);
 
-    void reportSlowIoFromFile(const std::shared_ptr<IStats> &stats_client, const char *path,
+    void reportSlowIoFromFile(const std::shared_ptr<IStats> &stats_client, const std::string& path,
                               const VendorSlowIo::IoOperation &operation_s);
     void logTempResidencyStats(const std::shared_ptr<IStats> &stats_client);
     void reportZramMmStat(const std::shared_ptr<IStats> &stats_client);
@@ -166,66 +106,6 @@ class SysfsCollector {
     void logBatteryGMSR(const std::shared_ptr<IStats> &stats_client);
     void logDmVerityPartitionReadAmount(const std::shared_ptr<IStats> &stats_client);
     void logBatteryHistoryValidation();
-
-    const char *const kSlowioReadCntPath;
-    const char *const kSlowioWriteCntPath;
-    const char *const kSlowioUnmapCntPath;
-    const char *const kSlowioSyncCntPath;
-    const char *const kCycleCountBinsPath;
-    const char *const kImpedancePath;
-    const char *const kCodecPath;
-    const char *const kCodec1Path;
-    const char *const kSpeechDspPath;
-    const char *const kBatteryCapacityCC;
-    const char *const kBatteryCapacityVFSOC;
-    const char *const kUFSLifetimeA;
-    const char *const kUFSLifetimeB;
-    const char *const kUFSLifetimeC;
-    const char *const kF2fsStatsPath;
-    const char *const kZramMmStatPath;
-    const char *const kZramBdStatPath;
-    const char *const kEEPROMPath;
-    const char *const kBrownoutCsvPath;
-    const char *const kBrownoutLogPath;
-    const char *const kBrownoutReasonProp;
-    const char *const kPowerMitigationStatsPath;
-    const char *const kPowerMitigationDurationPath;
-    const char *const kSpeakerTemperaturePath;
-    const char *const kSpeakerExcursionPath;
-    const char *const kSpeakerHeartbeatPath;
-    const std::vector<std::string> kUFSErrStatsPath;
-    const int kBlockStatsLength;
-    const char *const kAmsRatePath;
-    const std::vector<std::string> kThermalStatsPaths;
-    const char *const kCCARatePath;
-    const std::vector<std::pair<std::string, std::string>> kTempResidencyAndResetPaths;
-    const char *const kLongIRQMetricsPath;
-    const char *const kStormIRQMetricsPath;
-    const char *const kIRQStatsResetPath;
-    const char *const kResumeLatencyMetricsPath;
-    const char *const kModemPcieLinkStatsPath;
-    const char *const kWifiPcieLinkStatsPath;
-    const std::vector<std::string> kDisplayStatsPaths;
-    const std::vector<std::string> kDisplayPortStatsPaths;
-    const std::vector<std::string> kDisplayPortDSCStatsPaths;
-    const std::vector<std::string> kDisplayPortMaxResolutionStatsPaths;
-    const std::vector<std::string> kHDCPStatsPaths;
-    const char *const kPDMStatePath;
-    const char *const kWavesPath;
-    const char *const kAdaptedInfoCountPath;
-    const char *const kAdaptedInfoDurationPath;
-    const char *const kPcmLatencyPath;
-    const char *const kPcmCountPath;
-    const char *const kTotalCallCountPath;
-    const char *const kOffloadEffectsIdPath;
-    const char *const kOffloadEffectsDurationPath;
-    const char *const kBluetoothAudioUsagePath;
-    const std::vector<std::string> kGMSRPath;
-    const char *const kMaxfgHistoryPath;
-    const std::vector<std::string> kFGModelLoadingPath;
-    const std::vector<std::string> kFGLogBufferPath;
-    const char *const kSpeakerVersionPath;
-    const char *const kWaterEventPath;
 
     BatteryEEPROMReporter battery_EEPROM_reporter_;
     MmMetricsReporter mm_metrics_reporter_;

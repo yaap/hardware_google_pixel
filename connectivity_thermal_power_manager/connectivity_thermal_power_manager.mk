@@ -4,6 +4,4 @@ $(call soong_config_set,connectivity_thermal_power_manager_config,use_alcedo_mod
 ifeq ($(USES_ALCEDO_MODEM),true)
 PRODUCT_PACKAGES += ConnectivityThermalPowerManagerNextgen
 PRODUCT_PACKAGES_DEBUG += mipc_util
-else
-PRODUCT_PACKAGES += ConnectivityThermalPowerManager
 endif

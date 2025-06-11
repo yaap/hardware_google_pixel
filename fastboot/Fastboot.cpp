@@ -46,6 +46,8 @@ namespace implementation {
 constexpr const char* BRIGHTNESS_FILE = "/sys/class/backlight/panel0-backlight/brightness";
 constexpr int DISPLAY_BRIGHTNESS_DIM_THRESHOLD = 20;
 
+bool WipeDigitalCarKeys(void);
+
 using  OEMCommandHandler = std::function<Result(const std::vector<std::string>&)>;
 
 Return<void> Fastboot::getPartitionType(const ::android::hardware::hidl_string& /* partitionName */,
@@ -108,10 +110,23 @@ Result SetBrightnessLevel(const std::vector<std::string>& args) {
     return { Status::FAILURE_UNKNOWN, "Unable to set display brightness" };
 }
 
+Result DckWipe(const std::vector<std::string> &args) {
+    if (args.size()) {
+        return {Status::INVALID_ARGUMENT, "extraneois parameters for dck_wipe"};
+    }
+
+    if (WipeDigitalCarKeys()) {
+        return {Status::SUCCESS, ""};
+    }
+
+    return {Status::FAILURE_UNKNOWN, "clearing digital car keys failed"};
+}
+
 Return<void> Fastboot::doOemCommand(const ::android::hardware::hidl_string& oemCmdArgs,
                           doOemCommand_cb _hidl_cb) {
     const std::unordered_map<std::string, OEMCommandHandler> kOEMCmdMap = {
-        {FB_OEM_SET_BRIGHTNESS, SetBrightnessLevel},
+            {FB_OEM_SET_BRIGHTNESS, SetBrightnessLevel},
+            {FB_OEM_DCK_WIPE, DckWipe},
     };
 
     auto args = android::base::Split(oemCmdArgs, " ");

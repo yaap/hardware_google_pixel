@@ -194,9 +194,7 @@ void BatteryCapacityReporter::reportEvent(const std::shared_ptr<IStats> &stats_c
     VendorAtom event = {.reverseDomainName = "",
                         .atomId = PixelAtoms::Atom::kFgCapacity,
                         .values = std::move(values)};
-    const ndk::ScopedAStatus ret = stats_client->reportVendorAtom(event);
-    if (!ret.isOk())
-        ALOGE("Unable to report to IStats service");
+    reportVendorAtom(stats_client, event);
 }
 
 }  // namespace pixel

@@ -47,6 +47,8 @@ namespace fastboot {
 constexpr const char *BRIGHTNESS_FILE = "/sys/class/backlight/panel0-backlight/brightness";
 constexpr int DISPLAY_BRIGHTNESS_DIM_THRESHOLD = 20;
 
+bool WipeDigitalCarKeys(void);
+
 using OEMCommandHandler =
         std::function<ScopedAStatus(const std::vector<std::string> &, std::string *)>;
 
@@ -126,9 +128,25 @@ ScopedAStatus SetBrightnessLevel(const std::vector<std::string> &args, std::stri
                                                               message.c_str());
 }
 
+ScopedAStatus DckWipe(const std::vector<std::string> &args, std::string *_aidl_return) {
+    if (args.size()) {
+        return ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_ARGUMENT,
+                                                           "extraneois parameters for dck_wipe");
+    }
+
+    if (WipeDigitalCarKeys()) {
+        *_aidl_return = "";
+        return ScopedAStatus::ok();
+    }
+
+    return ScopedAStatus::fromServiceSpecificErrorWithMessage(BnFastboot::FAILURE_UNKNOWN,
+                                                              "clearing digital car keys failed");
+}
+
 ScopedAStatus Fastboot::doOemCommand(const std::string &in_oemCmd, std::string *_aidl_return) {
     const std::unordered_map<std::string, OEMCommandHandler> kOEMCmdMap = {
             {FB_OEM_SET_BRIGHTNESS, SetBrightnessLevel},
+            {FB_OEM_DCK_WIPE, DckWipe},
     };
 
     auto args = ::android::base::Split(in_oemCmd, " ");

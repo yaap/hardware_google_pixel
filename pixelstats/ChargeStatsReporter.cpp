@@ -41,6 +41,8 @@ using android::hardware::google::pixel::PixelAtoms::VoltageTierStats;
 
 #define DURATION_FILTER_SECS 15
 #define CHG_STATS_FMT "%d,%d,%d, %d,%d,%d,%d %d %d,%d, %d,%d"
+#define WLC_ASTATS_FMT "A:%d,%d,%d,%d"
+#define WLC_DSTATS_FMT "D:%x,%x,%x,%x,%x, %x,%x"
 
 ChargeStatsReporter::ChargeStatsReporter() {}
 
@@ -95,14 +97,16 @@ void ChargeStatsReporter::ReportChargeStats(const std::shared_ptr<IStats> &stats
     }
 
     if (!wline_at.empty()) {
-        int32_t ssoc_tmp = 0;
+        int32_t type = 0, soc = 0, voltage = 0, current = 0;
         ALOGD("wlc: processing %s", wline_at.c_str());
-        if (sscanf(wline_at.c_str(), "A:%d", &ssoc_tmp) != 1) {
+        if (sscanf(wline_at.c_str(), WLC_ASTATS_FMT, &type, &soc, &voltage, &current) != 4) {
             ALOGE("Couldn't process %s", wline_at.c_str());
         } else {
-            tmp[0] = wireless_charge_stats_.TranslateSysModeToAtomValue(ssoc_tmp);
+            tmp[0] = wireless_charge_stats_.TranslateSysModeToAtomValue(type);
+            tmp[1] = voltage;
+            tmp[2] = current;
             ALOGD("wlc: processing %s", wline_ac.c_str());
-            if (sscanf(wline_ac.c_str(), "D:%x,%x,%x,%x,%x, %x,%x", &tmp[10], &tmp[11], &tmp[12],
+            if (sscanf(wline_ac.c_str(), WLC_DSTATS_FMT, &tmp[10], &tmp[11], &tmp[12],
                        &tmp[13], &tmp[14], &tmp[15], &tmp[16]) != 7)
                 ALOGE("Couldn't process %s", wline_ac.c_str());
         }
@@ -156,9 +160,7 @@ void ChargeStatsReporter::ReportChargeStats(const std::shared_ptr<IStats> &stats
     VendorAtom event = {.reverseDomainName = "",
                         .atomId = PixelAtoms::Atom::kChargeStats,
                         .values = std::move(values)};
-    const ndk::ScopedAStatus ret = stats_client->reportVendorAtom(event);
-    if (!ret.isOk())
-        ALOGE("Unable to report ChargeStats to Stats service");
+    reportVendorAtom(stats_client, event);
 }
 
 void ChargeStatsReporter::ReportVoltageTierStats(const std::shared_ptr<IStats> &stats_client,
@@ -225,9 +227,7 @@ void ChargeStatsReporter::ReportVoltageTierStats(const std::shared_ptr<IStats> &
     VendorAtom event = {.reverseDomainName = "",
                         .atomId = PixelAtoms::Atom::kVoltageTierStats,
                         .values = std::move(values)};
-    const ndk::ScopedAStatus ret = stats_client->reportVendorAtom(event);
-    if (!ret.isOk())
-        ALOGE("Unable to report VoltageTierStats to Stats service");
+    reportVendorAtom(stats_client, event);
 }
 
 /**

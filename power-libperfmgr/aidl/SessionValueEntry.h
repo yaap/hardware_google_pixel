@@ -18,6 +18,7 @@
 
 #include <ostream>
 
+#include "AdpfTypes.h"
 #include "AppDescriptorTrace.h"
 #include "SessionRecords.h"
 #include "UClampVoter.h"
@@ -48,12 +49,15 @@ struct SessionValueEntry {
     std::string idString;
     bool isActive{true};
     bool isAppSession{false};
+    android::hardware::power::SessionTag tag;
+    ProcessTag procTag;
     std::chrono::steady_clock::time_point lastUpdatedTime;
     std::shared_ptr<Votes> votes;
     std::shared_ptr<AppDescriptorTrace> sessionTrace;
     FrameBuckets sessFrameBuckets;
     bool isPowerEfficient{false};
     HeurBoostStatistics hBoostModeDist;
+    bool rampupBoostActive{false};
 
     // Write info about power session to ostream for logging and debugging
     std::ostream &dump(std::ostream &os) const;

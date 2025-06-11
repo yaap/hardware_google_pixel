@@ -33,6 +33,53 @@ import gitlint.git as git
 
 from pixel_config_checker import PixelJSONFieldNameChecker
 
+def powerhint_check_actions_and_nodes(powerhint_json_files):
+  """Preupload check for powerhint actions and nodes.
+
+    This function checks that all powerhint actions on nodes
+    and other actions (DoHint, EndHint, etc..) are valid and
+    nodes exist. It also validates that values specified in
+    actions are supported values in nodes. It also checks if
+    nodes are double declared.
+
+    Args: Map of powerhint json file names to actions.
+
+    Returns:
+        Status, Error Message.
+  """
+
+  for file_path, powerhint in powerhint_json_files.items():
+    nodes_dict = dict()
+    action_names = set()
+
+    # Create reference Nodes and Actions
+    for node in powerhint["Nodes"]:
+      if node["Name"] in nodes_dict:
+        return False, file_path + ": repeated node " + node["Name"]
+      nodes_dict[node["Name"]] = node["Values"]
+
+    for action in powerhint["Actions"]:
+      action_names.add(action["PowerHint"])
+
+    for action in powerhint["Actions"]:
+      if "Type" in action:
+        if action["Value"] not in action_names:
+          return False, file_path + ": Action " + action["PowerHint"] + \
+            ": unknown Hint " + action["Value"]
+
+      if "Node" in action:
+        if action["Node"] not in nodes_dict.keys():
+          return False, file_path + ": Action " + action["PowerHint"] + \
+            ": unknown Node " + action["Node"]
+
+        if action["Value"] not in nodes_dict[action["Node"]]:
+          return False, file_path + ": Action " + action["PowerHint"] + \
+            ": Node " + action["Node"] + " unknown value " + action["Value"]
+
+  return True, ""  # Return True if all actions are valid
+
+
+
 def get_powerhint_modified_files(commit):
   """Getter for finding which powerhint json files were modified
     in the commit.
@@ -96,6 +143,10 @@ def main(args=None):
   # Instantiates the common config checker and runs tests on config.
   checker = PixelJSONFieldNameChecker(json_files, args.field_names)
   success, message = checker.check_json_field_names()
+  if not success:
+    return "powerhint JSON field name check error: " + message
+
+  success, message = powerhint_check_actions_and_nodes(json_files)
   if not success:
     return "powerhint JSON field name check error: " + message
 

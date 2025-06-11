@@ -35,18 +35,20 @@ using aidl::android::frameworks::stats::IStats;
 class WaterEventReporter {
   public:
     WaterEventReporter();
-    void logEvent(const std::shared_ptr<IStats> &stats_client,
-                  PixelAtoms::WaterEventReported::EventPoint event_point,
-                  const std::string_view sysfs_root);
+    void logBootEvent(const std::shared_ptr<IStats> &stats_client,
+                      const std::vector<std::string> &sysfs_roots);
     void logUevent(const std::shared_ptr<IStats> &stats_client,
                   const std::string_view uevent_devpath);
     bool ueventDriverMatch(const char * const driver);
   private:
+    void logEvent(const std::shared_ptr<IStats> &stats_client,
+                  const PixelAtoms::WaterEventReported::EventPoint event_point,
+                  const std::string_view sysfs_root);
     // Proto messages are 1-indexed and VendorAtom field numbers start at 2, so
     // store everything in the values array at the index of the field number
     // -2.
     const int kVendorAtomOffset = 2;
-    const int kNumOfWaterEventAtoms = 13;
+    const int kNumOfWaterEventAtomFields = 13;
 };
 
 }  // namespace pixel

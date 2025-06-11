@@ -67,7 +67,7 @@ bool BatteryTTFReporter::reportBatteryTTFStats(const std::shared_ptr<IStats> &st
 
 void BatteryTTFReporter::reportBatteryTTFStatsEvent(
         const std::shared_ptr<IStats> &stats_client, const char *line) {
-    int ttf_stats_stats_fields[] = {
+    int ttf_stats_fields[] = {
         BatteryTimeToFullStatsReported::kTtfTypeFieldNumber,
         BatteryTimeToFullStatsReported::kTtfRangeFieldNumber,
         BatteryTimeToFullStatsReported::kSoc0FieldNumber,
@@ -82,7 +82,7 @@ void BatteryTTFReporter::reportBatteryTTFStatsEvent(
         BatteryTimeToFullStatsReported::kSoc9FieldNumber,
     };
 
-    const int32_t fields_size = std::size(ttf_stats_stats_fields);
+    const int32_t fields_size = std::size(ttf_stats_fields);
     const int32_t soc_start = 2; /* after type and range */
     int32_t size, range, type, i = 0, soc[fields_size - soc_start] = { 0 };
     std::vector<VendorAtomValue> values(fields_size);
@@ -105,20 +105,18 @@ void BatteryTTFReporter::reportBatteryTTFStatsEvent(
 
     ALOGD("BatteryTTFStats: processed %s", line);
     val.set<VendorAtomValue::intValue>(type);
-    values[ttf_stats_stats_fields[0] - kVendorAtomOffset] = val;
+    values[ttf_stats_fields[0] - kVendorAtomOffset] = val;
     val.set<VendorAtomValue::intValue>(range);
-    values[ttf_stats_stats_fields[1] - kVendorAtomOffset] = val;
+    values[ttf_stats_fields[1] - kVendorAtomOffset] = val;
     for (i = soc_start; i < fields_size; i++) {
         val.set<VendorAtomValue::intValue>(soc[i - soc_start]);
-        values[ttf_stats_stats_fields[i] - kVendorAtomOffset] = val;
+        values[ttf_stats_fields[i] - kVendorAtomOffset] = val;
     }
 
     VendorAtom event = {.reverseDomainName = "",
                         .atomId = PixelAtoms::Atom::kBatteryTimeToFullStatsReported,
                         .values = std::move(values)};
-    const ndk::ScopedAStatus ret = stats_client->reportVendorAtom(event);
-    if (!ret.isOk())
-        ALOGE("Unable to report BatteryTTFStats to Stats service");
+    reportVendorAtom(stats_client, event);
 }
 
 void BatteryTTFReporter::checkAndReportStats(const std::shared_ptr<IStats> &stats_client) {

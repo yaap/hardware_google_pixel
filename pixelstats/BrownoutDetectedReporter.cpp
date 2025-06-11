@@ -395,6 +395,11 @@ void BrownoutDetectedReporter::logBrownoutCsv(const std::shared_ptr<IStats> &sta
         for (int i = 0; i < ODPM_MAX_IDX; i++) {
             max_value.odpm_value_[i] = atoi(row[i + ODPM_CHANNEL_0].c_str());
         }
+        if (row.size() > MITIGATION_METHOD_0_TIME) {
+            max_value.mitigation_method_0_ = atoi(row[MITIGATION_METHOD_0].c_str());
+            max_value.mitigation_method_0_count_ = atoi(row[MITIGATION_METHOD_0_COUNT].c_str());
+            max_value.mitigation_method_0_time_us_ = atoi(row[MITIGATION_METHOD_0_TIME].c_str());
+        }
         if (row.size() > MAX_CURR) {
             max_value.evt_cnt_oilo1_ = atoi(row[EVT_CNT_IDX_OILO1].c_str());
             max_value.evt_cnt_oilo2_ = atoi(row[EVT_CNT_IDX_OILO2].c_str());

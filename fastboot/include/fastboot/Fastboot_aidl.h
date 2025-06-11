@@ -24,6 +24,7 @@ namespace hardware {
 namespace fastboot {
 class Fastboot : public BnFastboot {
 #define FB_OEM_SET_BRIGHTNESS "setbrightness"
+#define FB_OEM_DCK_WIPE "dck_wipe"
     ::ndk::ScopedAStatus doOemCommand(const std::string &in_oemCmd,
                                       std::string *_aidl_return) override;
     ::ndk::ScopedAStatus doOemSpecificErase() override;

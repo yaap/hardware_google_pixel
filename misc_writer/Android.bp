@@ -18,6 +18,28 @@ package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
 
+soong_config_module_type {
+    name: "misc_writer_cc_defaults",
+    module_type: "cc_defaults",
+    config_namespace: "misc_writer",
+    bool_variables: ["enable_sota_boot"],
+    properties: ["cflags"],
+}
+
+soong_config_bool_variable {
+    name: "enable_sota_boot",
+}
+
+misc_writer_cc_defaults {
+    name: "misc_writer_config_defaults",
+    vendor: true,
+    soong_config_variables: {
+        enable_sota_boot: {
+            cflags: ["-DENABLE_SOTA_BOOT=1"],
+        },
+    },
+}
+
 cc_defaults {
     name: "misc_writer_defaults",
     vendor: true,
@@ -71,6 +93,7 @@ cc_library_static {
     name: "libmisc_writer_vendor",
     defaults: [
         "misc_writer_defaults",
+        "misc_writer_config_defaults",
     ],
 
     srcs: [

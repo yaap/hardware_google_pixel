@@ -77,6 +77,11 @@ void AdpfConfig::dumpToFd(int fd) {
         dump_buf << "JankCheckTimeFactor: " << mJankCheckTimeFactor.value() << "\n";
         dump_buf << "LowFrameRateThreshold: " << mLowFrameRateThreshold.value() << "\n";
         dump_buf << "MaxRecordsNum: " << mMaxRecordsNum.value() << "\n";
+        if (mHeuristicRampup.has_value()) {
+            dump_buf << "HeuristicRampup: " << mHeuristicRampup.value() << "\n";
+            dump_buf << "DefaultRampupMult: " << mDefaultRampupMult.value() << "\n";
+            dump_buf << "HighRampupMult: " << mHighRampupMult.value() << "\n";
+        }
     }
     if (mUclampMaxEfficientBase.has_value()) {
         dump_buf << "UclampMax_EfficientBase: " << *mUclampMaxEfficientBase << "\n";

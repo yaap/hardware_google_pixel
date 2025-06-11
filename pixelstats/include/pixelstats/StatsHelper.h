@@ -26,17 +26,21 @@ namespace google {
 namespace pixel {
 
 using aidl::android::frameworks::stats::IStats;
+using aidl::android::frameworks::stats::VendorAtom;
+using aidl::android::frameworks::stats::VendorAtomValue;
 
 bool fileExists(const std::string &path);
 std::shared_ptr<IStats> getStatsService();
 
 enum ReportEventType {
-  EvtFGAbnormalEvent   = 0x4142, /* AB */
-  EvtFGLearningHistory = 0x4C48, /* LH */
-  EvtGMSR              = 0xFFFF, /* GMSR */
-  EvtModelLoading      = 0x4D4C, /* ML */
+  EvtFGAbnormalEvent = 0x4142,   /* AB */
+  EvtFwUpdate = 0x4655,          /* FU */
   EvtHistoryValidation = 0x4856, /* HV */
-  EvtFGRegularMonitor  = 0x524D, /* RM */
+  EvtFGLearningHistory = 0x4C48, /* LH */
+  EvtModelLoading = 0x4D4C,      /* ML */
+  EvtFGRegularMonitor = 0x524D,  /* RM */
+  EvtGMSR = 0xFFFF,              /* GMSR */
+  EvtWlcFwUpdate = 0x574C,       /* WL */
 };
 
 enum ReportEventFormat {
@@ -44,6 +48,8 @@ enum ReportEventFormat {
   FormatIgnoreAddr,
   FormatOnlyVal,
 };
+
+void reportVendorAtom(const std::shared_ptr<IStats> &stats_client, VendorAtom event);
 
 void reportSpeakerImpedance(const std::shared_ptr<IStats> &stats_client,
                             const PixelAtoms::VendorSpeakerImpedance &speakerImpedance);
@@ -68,9 +74,12 @@ void reportSpeakerHealthStat(const std::shared_ptr<IStats> &stats_client,
 
 void reportUsbDataSessionEvent(const std::shared_ptr<IStats> &stats_client,
                                const PixelAtoms::VendorUsbDataSessionEvent &usb_session);
+
 void readLogbuffer(const std::string &buf_path, int num_fields, uint16_t code,
                    enum ReportEventFormat format, unsigned int last_check_time,
                    std::vector<std::vector<uint32_t>> &events);
+
+void setAtomFieldValue(std::vector<VendorAtomValue> *values, int offset, int content);
 
 }  // namespace pixel
 }  // namespace google

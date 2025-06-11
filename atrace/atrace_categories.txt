@@ -31,6 +31,8 @@ gfx
  mali/mali_KCPU_CQS_SET
  mali/mali_KCPU_CQS_WAIT_BEGIN
  mali/mali_KCPU_CQS_WAIT_END
+ power/gpu_frequency
+ power/gpu_work_period
 memory
  fastrpc/fastrpc_dma_stat
  dmabuf_heap/dma_heap_stat

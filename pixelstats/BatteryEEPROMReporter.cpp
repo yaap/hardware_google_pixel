@@ -45,7 +45,7 @@ using android::hardware::google::pixel::PixelAtoms::BatteryEEPROM;
 
 BatteryEEPROMReporter::BatteryEEPROMReporter() {}
 
-bool BatteryEEPROMReporter::ReadFileToInt(const std::string &path, int16_t *val) {
+bool BatteryEEPROMReporter::ReadFileToInt(const std::string &path, int32_t *val) {
     std::string file_contents;
 
     if (!ReadFileToString(path.c_str(), &file_contents)) {
@@ -62,12 +62,18 @@ bool BatteryEEPROMReporter::ReadFileToInt(const std::string &path, int16_t *val)
     return true;
 }
 
-void BatteryEEPROMReporter::setAtomFieldValue(std::vector<VendorAtomValue> *values, int offset,
-                                              int content) {
-    std::vector<VendorAtomValue> &val = *values;
+std::string BatteryEEPROMReporter::checkPaths(const std::vector<std::string>& paths) {
+    if (paths.empty()) {
+        return ""; // Or throw an exception if appropriate
+    }
 
-    if (offset - kVendorAtomOffset < val.size())
-        val[offset - kVendorAtomOffset].set<VendorAtomValue::intValue>(content);
+    for (const auto& path : paths) { // Use range-based for loop
+        if (fileExists(path)) {
+            return path;
+        }
+    }
+
+    return ""; // No path found
 }
 
 void BatteryEEPROMReporter::checkAndReport(const std::shared_ptr<IStats> &stats_client,
@@ -112,8 +118,8 @@ void BatteryEEPROMReporter::checkAndReport(const std::shared_ptr<IStats> &stats_
     }
     */
 
-    struct BatteryHistoryRawFormat hist_raw;
-    struct BatteryHistory hist;
+    struct BatteryEEPROMPipelineRawFormat hist_raw;
+    struct BatteryEEPROMPipeline hist;
     int16_t i;
 
     ReadFileToInt(kBatteryPairingPath, &hist.battery_pairing);
@@ -159,19 +165,19 @@ void BatteryEEPROMReporter::checkAndReport(const std::shared_ptr<IStats> &stats_
 
         /* Mapping to original format to collect data */
         /* go/pixel-battery-eeprom-atom#heading=h.dcawdjiz2ls6 */
-        hist.tempco = hist_raw.tempco;
-        hist.rcomp0 = hist_raw.rcomp0;
-        hist.timer_h = (uint8_t)hist_raw.timer_h * 5;
-        hist.max_temp = (int8_t)hist_raw.maxtemp * 3 + 22;
-        hist.min_temp = (int8_t)hist_raw.mintemp * 3 - 20;
-        hist.min_ibatt = (int16_t)hist_raw.maxchgcurr * 500 * (-1);
-        hist.max_ibatt = (int16_t)hist_raw.maxdischgcurr * 500;
-        hist.min_vbatt = (uint16_t)hist_raw.minvolt * 10 + 2500;
-        hist.max_vbatt = (uint16_t)hist_raw.maxvolt * 20 + 4200;
-        hist.batt_soc = (uint8_t)hist_raw.vfsoc * 2;
-        hist.msoc = (uint8_t)hist_raw.mixsoc * 2;
-        hist.full_cap = (int16_t)hist_raw.fullcaprep * 125 / 1000;
-        hist.full_rep = (int16_t)hist_raw.fullcapnom * 125 / 1000;
+        hist.tempco = (int32_t)hist_raw.tempco;
+        hist.rcomp0 = (int32_t)hist_raw.rcomp0;
+        hist.timer_h = (int32_t)hist_raw.timer_h * 5;
+        hist.max_temp = (int32_t)hist_raw.maxtemp * 3 + 22;
+        hist.min_temp = (int32_t)hist_raw.mintemp * 3 - 20;
+        hist.min_ibatt = (int32_t)hist_raw.maxchgcurr * 500 * (-1);
+        hist.max_ibatt = (int32_t)hist_raw.maxdischgcurr * 500;
+        hist.min_vbatt = (int32_t)hist_raw.minvolt * 10 + 2500;
+        hist.max_vbatt = (int32_t)hist_raw.maxvolt * 20 + 4200;
+        hist.batt_soc = (int32_t)hist_raw.vfsoc * 2;
+        hist.msoc = (int32_t)hist_raw.mixsoc * 2;
+        hist.full_cap = (int32_t)hist_raw.fullcaprep * 125 / 1000;
+        hist.full_rep = (int32_t)hist_raw.fullcapnom * 125 / 1000;
 
         /* i < sparse_index_count: 20 40 60 80  */
         if (i < sparse_index_count)
@@ -189,44 +195,9 @@ int64_t BatteryEEPROMReporter::getTimeSecs(void) {
     return nanoseconds_to_seconds(systemTime(SYSTEM_TIME_BOOTTIME));
 }
 
-/**
- * @return true if a log should be reported, else false.
- * Here we use checksum to confirm the data is usable or not.
- * The checksum mismatch when storage data overflow or corrupt.
- * We don't need data in such cases.
- */
-bool BatteryEEPROMReporter::checkLogEvent(struct BatteryHistory hist) {
-    int checksum = 0;
-
-    checksum = hist.cycle_cnt + hist.full_cap + hist.esr + hist.rslow
-                + hist.soh + hist.batt_temp + hist.cutoff_soc + hist.cc_soc
-                + hist.sys_soc + hist.msoc + hist.batt_soc + hist.reserve
-                + hist.max_temp + hist.min_temp + hist.max_vbatt
-                + hist.min_vbatt + hist.max_ibatt + hist.min_ibatt;
-    /* Compare with checksum data */
-    if (checksum == hist.checksum) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
 void BatteryEEPROMReporter::reportEvent(const std::shared_ptr<IStats> &stats_client,
-                                        const struct BatteryHistory &hist) {
-    // upload atom
-    const std::vector<int> eeprom_history_fields = {
-            BatteryEEPROM::kCycleCntFieldNumber,  BatteryEEPROM::kFullCapFieldNumber,
-            BatteryEEPROM::kEsrFieldNumber,       BatteryEEPROM::kRslowFieldNumber,
-            BatteryEEPROM::kSohFieldNumber,       BatteryEEPROM::kBattTempFieldNumber,
-            BatteryEEPROM::kCutoffSocFieldNumber, BatteryEEPROM::kCcSocFieldNumber,
-            BatteryEEPROM::kSysSocFieldNumber,    BatteryEEPROM::kMsocFieldNumber,
-            BatteryEEPROM::kBattSocFieldNumber,   BatteryEEPROM::kReserveFieldNumber,
-            BatteryEEPROM::kMaxTempFieldNumber,   BatteryEEPROM::kMinTempFieldNumber,
-            BatteryEEPROM::kMaxVbattFieldNumber,  BatteryEEPROM::kMinVbattFieldNumber,
-            BatteryEEPROM::kMaxIbattFieldNumber,  BatteryEEPROM::kMinIbattFieldNumber,
-            BatteryEEPROM::kChecksumFieldNumber,  BatteryEEPROM::kTempcoFieldNumber,
-            BatteryEEPROM::kRcomp0FieldNumber,    BatteryEEPROM::kTimerHFieldNumber,
-            BatteryEEPROM::kFullRepFieldNumber,   BatteryEEPROM::kBatteryPairingFieldNumber};
+                                        const struct BatteryEEPROMPipeline &hist) {
+    std::vector<VendorAtomValue> values(kNumEEPROMPipelineFields);
 
     ALOGD("reportEvent: cycle_cnt:%d, full_cap:%d, esr:%d, rslow:%d, soh:%d, "
           "batt_temp:%d, cutoff_soc:%d, cc_soc:%d, sys_soc:%d, msoc:%d, "
@@ -238,80 +209,6 @@ void BatteryEEPROMReporter::reportEvent(const std::shared_ptr<IStats> &stats_cli
           hist.max_temp, hist.min_temp, hist.max_vbatt, hist.min_vbatt, hist.max_ibatt,
           hist.min_ibatt, hist.checksum, hist.full_rep, hist.tempco, hist.rcomp0, hist.timer_h,
           hist.battery_pairing);
-
-    std::vector<VendorAtomValue> values(eeprom_history_fields.size());
-    VendorAtomValue val;
-
-    val.set<VendorAtomValue::intValue>(hist.cycle_cnt);
-    values[BatteryEEPROM::kCycleCntFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.full_cap);
-    values[BatteryEEPROM::kFullCapFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.esr);
-    values[BatteryEEPROM::kEsrFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.rslow);
-    values[BatteryEEPROM::kRslowFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.soh);
-    values[BatteryEEPROM::kSohFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.batt_temp);
-    values[BatteryEEPROM::kBattTempFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.cutoff_soc);
-    values[BatteryEEPROM::kCutoffSocFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.cc_soc);
-    values[BatteryEEPROM::kCcSocFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.sys_soc);
-    values[BatteryEEPROM::kSysSocFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.msoc);
-    values[BatteryEEPROM::kMsocFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.batt_soc);
-    values[BatteryEEPROM::kBattSocFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.reserve);
-    values[BatteryEEPROM::kReserveFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.max_temp);
-    values[BatteryEEPROM::kMaxTempFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.min_temp);
-    values[BatteryEEPROM::kMinTempFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.max_vbatt);
-    values[BatteryEEPROM::kMaxVbattFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.min_vbatt);
-    values[BatteryEEPROM::kMinVbattFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.max_ibatt);
-    values[BatteryEEPROM::kMaxIbattFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.min_ibatt);
-    values[BatteryEEPROM::kMinIbattFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.checksum);
-    values[BatteryEEPROM::kChecksumFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.tempco);
-    values[BatteryEEPROM::kTempcoFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.rcomp0);
-    values[BatteryEEPROM::kRcomp0FieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.timer_h);
-    values[BatteryEEPROM::kTimerHFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.full_rep);
-    values[BatteryEEPROM::kFullRepFieldNumber - kVendorAtomOffset] = val;
-    val.set<VendorAtomValue::intValue>(hist.battery_pairing);
-    values[BatteryEEPROM::kBatteryPairingFieldNumber - kVendorAtomOffset] = val;
-
-    VendorAtom event = {.reverseDomainName = "",
-                        .atomId = PixelAtoms::Atom::kBatteryEeprom,
-                        .values = std::move(values)};
-    const ndk::ScopedAStatus ret = stats_client->reportVendorAtom(event);
-    if (!ret.isOk())
-        ALOGE("Unable to report BatteryEEPROM to Stats service");
-}
-
-void BatteryEEPROMReporter::reportEventInt32(const std::shared_ptr<IStats> &stats_client,
-                                             const struct BatteryHistoryInt32 &hist) {
-    std::vector<VendorAtomValue> values(23);
-
-    ALOGD("reportEvent: cycle_cnt:%d, full_cap:%d, esr:%d, rslow:%d, soh:%d, "
-          "batt_temp:%d, cutoff_soc:%d, cc_soc:%d, sys_soc:%d, msoc:%d, "
-          "batt_soc:%d, reserve:%d, max_temp:%d, min_temp:%d, max_vbatt:%d, "
-          "min_vbatt:%d, max_ibatt:%d, min_ibatt:%d, checksum:%#x, full_rep:%d, "
-          "tempco:%#x, rcomp0:%#x, timer_h:%d",
-          hist.cycle_cnt, hist.full_cap, hist.esr, hist.rslow, hist.soh, hist.batt_temp,
-          hist.cutoff_soc, hist.cc_soc, hist.sys_soc, hist.msoc, hist.batt_soc, hist.reserve,
-          hist.max_temp, hist.min_temp, hist.max_vbatt, hist.min_vbatt, hist.max_ibatt,
-          hist.min_ibatt, hist.checksum, hist.full_rep, hist.tempco, hist.rcomp0, hist.timer_h);
 
     setAtomFieldValue(&values, BatteryEEPROM::kCycleCntFieldNumber, hist.cycle_cnt);
     setAtomFieldValue(&values, BatteryEEPROM::kFullCapFieldNumber, hist.full_cap);
@@ -336,42 +233,32 @@ void BatteryEEPROMReporter::reportEventInt32(const std::shared_ptr<IStats> &stat
     setAtomFieldValue(&values, BatteryEEPROM::kRcomp0FieldNumber, hist.rcomp0);
     setAtomFieldValue(&values, BatteryEEPROM::kTimerHFieldNumber, hist.timer_h);
     setAtomFieldValue(&values, BatteryEEPROM::kFullRepFieldNumber, hist.full_rep);
+    setAtomFieldValue(&values, BatteryEEPROM::kBatteryPairingFieldNumber, hist.battery_pairing);
 
     VendorAtom event = {.reverseDomainName = "",
                         .atomId = PixelAtoms::Atom::kBatteryEeprom,
                         .values = std::move(values)};
-    const ndk::ScopedAStatus ret = stats_client->reportVendorAtom(event);
-    if (!ret.isOk())
-        ALOGE("Unable to report BatteryEEPROM to Stats service");
+    reportVendorAtom(stats_client, event);
 }
 
 void BatteryEEPROMReporter::checkAndReportGMSR(const std::shared_ptr<IStats> &stats_client,
                                                const std::vector<std::string> &paths) {
-    struct BatteryHistory gmsr = {.checksum = EvtGMSR};
+    struct BatteryEEPROMPipeline gmsr = {.checksum = EvtGMSR};
+    std::string path = checkPaths(paths);
     std::string file_contents;
-    std::string path;
     int16_t num;
 
-    if (paths.empty())
+    if (path.empty())
         return;
-
-    for (int i = 0; i < paths.size(); i++) {
-        if (fileExists(paths[i])) {
-            path = paths[i];
-            break;
-        }
-    }
 
     if (!ReadFileToString(path, &file_contents)) {
         ALOGE("Unable to read gmsr path: %s - %s", path.c_str(), strerror(errno));
         return;
     }
 
-    num = sscanf(file_contents.c_str(),  "rcomp0\t:%4" SCNx16 "\ntempco\t:%4" SCNx16
-                 "\nfullcaprep\t:%4" SCNx16 "\ncycles\t:%4" SCNx16 "\nfullcapnom\t:%4" SCNx16
-                 "\nqresidual00\t:%4" SCNx16 "\nqresidual10\t:%4" SCNx16
-                 "\nqresidual20\t:%4" SCNx16 "\nqresidual30\t:%4" SCNx16
-                 "\ncv_mixcap\t:%4" SCNx16 "\nhalftime\t:%4" SCNx16,
+    num = sscanf(file_contents.c_str(), "rcomp0\t:%x\ntempco\t:%x\nfullcaprep\t:%x\ncycles\t:%x"
+                 "\nfullcapnom\t:%x\nqresidual00\t:%x\nqresidual10\t:%x\nqresidual20\t:%x"
+                 "\nqresidual30\t:%x\ncv_mixcap\t:%x\nhalftime\t:%x",
                  &gmsr.rcomp0, &gmsr.tempco, &gmsr.full_rep, &gmsr.cycle_cnt, &gmsr.full_cap,
                  &gmsr.max_vbatt, &gmsr.min_vbatt, &gmsr.max_ibatt, &gmsr.min_ibatt,
                  &gmsr.esr, &gmsr.rslow);
@@ -396,10 +283,9 @@ void BatteryEEPROMReporter::checkAndReportMaxfgHistory(const std::shared_ptr<ISt
     if (path.empty())
         return;
 
-    if (!ReadFileToString(path, &file_contents)) {
-        ALOGD("Unable to read maxfg_hist path: %s - %s", path.c_str(), strerror(errno));
+    /* not support max17201 */
+    if (!ReadFileToString(path, &file_contents))
         return;
-    }
 
     std::string hist_each;
     const int kHistTotalLen = file_contents.size();
@@ -407,7 +293,7 @@ void BatteryEEPROMReporter::checkAndReportMaxfgHistory(const std::shared_ptr<ISt
     ALOGD("checkAndReportMaxfgHistory:size=%d\n%s", kHistTotalLen, file_contents.c_str());
 
     for (i = 0; i < kHistTotalLen; i++) {
-        struct BatteryHistory maxfg_hist;
+        struct BatteryEEPROMPipeline maxfg_hist;
         uint16_t nQRTable00, nQRTable10, nQRTable20, nQRTable30, nCycles, nFullCapNom;
         uint16_t nRComp0, nTempCo, nIAvgEmpty, nFullCapRep, nVoltTemp, nMaxMinCurr, nMaxMinVolt;
         uint16_t nMaxMinTemp, nSOC, nTimerH;
@@ -455,22 +341,15 @@ void BatteryEEPROMReporter::checkAndReportMaxfgHistory(const std::shared_ptr<ISt
 
 void BatteryEEPROMReporter::checkAndReportFGModelLoading(const std::shared_ptr<IStats> &client,
                                                          const std::vector<std::string> &paths) {
-    struct BatteryHistory params = {.full_cap = 0, .esr = 0, .rslow = 0,
+    struct BatteryEEPROMPipeline params = {.full_cap = 0, .esr = 0, .rslow = 0,
                                     .checksum = EvtModelLoading, };
+    std::string path = checkPaths(paths);
     std::string file_contents;
-    std::string path;
     int num;
     const char *data;
 
-    if (paths.empty())
+    if (path.empty())
         return;
-
-    for (int i = 0; i < paths.size(); i++) {
-        if (fileExists(paths[i])) {
-            path = paths[i];
-            break;
-        }
-    }
 
     /* not found */
     if (path.empty())
@@ -483,7 +362,7 @@ void BatteryEEPROMReporter::checkAndReportFGModelLoading(const std::shared_ptr<I
 
     data = file_contents.c_str();
 
-    num = sscanf(data, "ModelNextUpdate: %" SCNu16 "%*[0-9a-f: \n]ATT: %" SCNu16 " FAIL: %" SCNu16,
+    num = sscanf(data, "ModelNextUpdate: %x%*[0-9a-f: \n]ATT: %x FAIL: %x",
                  &params.rslow, &params.full_cap, &params.esr);
     if (num != 3) {
         ALOGE("Couldn't process ModelLoading History. num=%d\n", num);
@@ -499,23 +378,12 @@ void BatteryEEPROMReporter::checkAndReportFGModelLoading(const std::shared_ptr<I
 
 void BatteryEEPROMReporter::checkAndReportFGLearning(const std::shared_ptr<IStats> &stats_client,
                                                      const std::vector<std::string> &paths) {
-    struct BatteryHistoryInt32 params = {.checksum = EvtFGLearningHistory};
-    std::string path;
+    struct BatteryEEPROMPipeline params = {.checksum = EvtFGLearningHistory};
+    std::string path = checkPaths(paths);
     struct timespec boot_time;
     auto format = FormatIgnoreAddr;
     std::vector<std::vector<uint32_t>> events;
 
-    if (paths.empty())
-        return;
-
-    for (int i = 0; i < paths.size(); i++) {
-        if (fileExists(paths[i])) {
-            path = paths[i];
-            break;
-        }
-    }
-
-    /* not found */
     if (path.empty())
         return;
 
@@ -533,12 +401,12 @@ void BatteryEEPROMReporter::checkAndReportFGLearning(const std::shared_ptr<IStat
             params.esr = event[1];                     /* dpacc */
             params.rslow = event[2];                   /* dqacc */
             params.full_rep = event[3];                /* fcrep */
-            params.msoc = (uint8_t)(event[4] >> 8);    /* repsoc */
-            params.sys_soc = (uint8_t)(event[5] >> 8); /* mixsoc */
-            params.batt_soc = (uint8_t)(event[6] >> 8);/* vfsoc */
+            params.msoc = event[4] >> 8;               /* repsoc */
+            params.sys_soc = event[5] >> 8;            /* mixsoc */
+            params.batt_soc = event[6] >> 8;           /* vfsoc */
             params.min_ibatt = event[7];               /* fstats */
-            params.max_temp = (int8_t)(event[8] >> 8); /* avgtemp */
-            params.min_temp = (int8_t)(event[9] >> 8); /* temp */
+            params.max_temp = event[8] >> 8;           /* avgtemp */
+            params.min_temp = event[9] >> 8;           /* temp */
             params.max_ibatt = event[10];              /* qh */
             params.max_vbatt = event[11];              /* vcell */
             params.min_vbatt = event[12];              /* avgvcell */
@@ -551,30 +419,19 @@ void BatteryEEPROMReporter::checkAndReportFGLearning(const std::shared_ptr<IStat
             ALOGE("Not support %zu fields for FG learning event", event.size());
             continue;
         }
-        reportEventInt32(stats_client, params);
+        reportEvent(stats_client, params);
     }
     last_lh_check_ = (unsigned int)boot_time.tv_sec;
 }
 
 void BatteryEEPROMReporter::checkAndReportValidation(const std::shared_ptr<IStats> &stats_client,
                                                      const std::vector<std::string> &paths) {
-    struct BatteryHistoryInt32 params = {.checksum = EvtHistoryValidation};
-    std::string path;
+    struct BatteryEEPROMPipeline params = {.checksum = EvtHistoryValidation};
+    std::string path = checkPaths(paths);
     struct timespec boot_time;
     auto format = FormatIgnoreAddr;
     std::vector<std::vector<uint32_t>> events;
 
-    if (paths.empty())
-        return;
-
-    for (int i = 0; i < paths.size(); i++) {
-        if (fileExists(paths[i])) {
-            path = paths[i];
-            break;
-        }
-    }
-
-    /* not found */
     if (path.empty())
         return;
 
@@ -588,7 +445,7 @@ void BatteryEEPROMReporter::checkAndReportValidation(const std::shared_ptr<IStat
             params.esr = event[1];      /* num of entries need to be recovered or fix result */
             params.rslow = event[2];    /* last cycle count */
             params.full_rep = event[3]; /* estimate cycle count after recovery */
-            reportEventInt32(stats_client, params);
+            reportEvent(stats_client, params);
             /* force report history metrics if it was recovered */
             if (last_hv_check_ != 0) {
                 report_time_ = 0;

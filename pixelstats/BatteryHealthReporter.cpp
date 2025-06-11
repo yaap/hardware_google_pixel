@@ -108,9 +108,7 @@ void BatteryHealthReporter::reportBatteryHealthStatusEvent(
     VendorAtom event = {.reverseDomainName = "",
                         .atomId = PixelAtoms::Atom::kBatteryHealthStatus,
                         .values = std::move(values)};
-    const ndk::ScopedAStatus ret = stats_client->reportVendorAtom(event);
-    if (!ret.isOk())
-        ALOGE("Unable to report BatteryHealthStatus to Stats service");
+    reportVendorAtom(stats_client, event);
 }
 
 bool BatteryHealthReporter::reportBatteryHealthUsage(const std::shared_ptr<IStats> &stats_client) {
@@ -168,9 +166,7 @@ void BatteryHealthReporter::reportBatteryHealthUsageEvent(
     VendorAtom event = {.reverseDomainName = "",
                         .atomId = PixelAtoms::Atom::kBatteryHealthUsage,
                         .values = std::move(values)};
-    const ndk::ScopedAStatus ret = stats_client->reportVendorAtom(event);
-    if (!ret.isOk())
-        ALOGE("Unable to report BatteryHealthStatus to Stats service");
+    reportVendorAtom(stats_client, event);
 }
 
 void BatteryHealthReporter::checkAndReportStatus(const std::shared_ptr<IStats> &stats_client) {

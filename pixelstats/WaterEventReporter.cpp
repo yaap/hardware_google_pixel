@@ -78,23 +78,24 @@ void WaterEventReporter::logEvent(const std::shared_ptr<IStats> &stats_client,
         return;
     }
 
-    std::vector<VendorAtomValue> values(kNumOfWaterEventAtoms, 0);
+    std::vector<VendorAtomValue> values(kNumOfWaterEventAtomFields, 0);
 
     // Is this during boot or as a result of an event
     values[PixelAtoms::WaterEventReported::kCollectionEventFieldNumber - kVendorAtomOffset] = event_point;
 
     // Most important, what is the state of the fuse
-    std::string fuse_state_str;
-    if (ReadFileToString(sysfs_path + "/fuse/status", &fuse_state_str)) {
-        if (!fuse_state_str.compare(0, 4, "open")) {
-            values[PixelAtoms::WaterEventReported::kFuseStateFieldNumber - kVendorAtomOffset] =
-                    PixelAtoms::WaterEventReported::FuseState::WaterEventReported_FuseState_BLOWN;
-        } else if (!fuse_state_str.compare(0, 5, "short")) {
-            values[PixelAtoms::WaterEventReported::kFuseStateFieldNumber - kVendorAtomOffset] =
-                    PixelAtoms::WaterEventReported::FuseState::WaterEventReported_FuseState_INTACT;
-        } else {
-             values[PixelAtoms::WaterEventReported::kFuseStateFieldNumber - kVendorAtomOffset] =
-                     PixelAtoms::WaterEventReported::FuseState::WaterEventReported_FuseState_FUSE_STATE_UNKNOWN;
+    int fuse_state;
+    if (readFileToInt(sysfs_path + "/fuse/status", &fuse_state)) {
+        auto &fuse_state_field = values[PixelAtoms::WaterEventReported::kFuseStateFieldNumber - kVendorAtomOffset];
+        switch (fuse_state) {
+            case 1:
+                fuse_state_field = PixelAtoms::WaterEventReported::FuseState::WaterEventReported_FuseState_BLOWN;
+                break;
+            case 0:
+                fuse_state_field = PixelAtoms::WaterEventReported::FuseState::WaterEventReported_FuseState_INTACT;
+                break;
+            default:
+                fuse_state_field = PixelAtoms::WaterEventReported::FuseState::WaterEventReported_FuseState_FUSE_STATE_UNKNOWN;
         }
     }
 
@@ -112,51 +113,42 @@ void WaterEventReporter::logEvent(const std::shared_ptr<IStats> &stats_client,
                 fault_enable ? PixelAtoms::WaterEventReported::CircuitState::WaterEventReported_CircuitState_CIRCUIT_ENABLED :
                               PixelAtoms::WaterEventReported::CircuitState::WaterEventReported_CircuitState_CIRCUIT_DISABLED;
 
-    std::tuple<std::string, int, int> sensors[] = {
-        {"reference", PixelAtoms::WaterEventReported::kReferenceStateFieldNumber, PixelAtoms::WaterEventReported::kReferenceThresholdFieldNumber},
-        {"sensor0", PixelAtoms::WaterEventReported::kSensor0StateFieldNumber, PixelAtoms::WaterEventReported::kSensor0ThresholdFieldNumber},
-        {"sensor1", PixelAtoms::WaterEventReported::kSensor1StateFieldNumber, PixelAtoms::WaterEventReported::kSensor1ThresholdFieldNumber},
-        {"sensor2", PixelAtoms::WaterEventReported::kSensor1StateFieldNumber, PixelAtoms::WaterEventReported::kSensor1ThresholdFieldNumber}
+    const std::tuple<std::string, int> sensors[] = {
+            {"reference", PixelAtoms::WaterEventReported::kReferenceStateFieldNumber},
+            {"sensor0", PixelAtoms::WaterEventReported::kSensor0StateFieldNumber},
+            {"sensor1", PixelAtoms::WaterEventReported::kSensor1StateFieldNumber}
     };
 
     //   Get the sensor states (including reference) from either the boot_value (if this is during
     //   startup), or the latched_value if this is the result of a uevent
-    for (auto e : sensors) {
-        std::string sensor_path = std::get<0>(e);
+    for (const auto& e : sensors) {
+        const std::string &sensor_path = std::get<0>(e);
         int sensor_state_field_number = std::get<1>(e);
-        int threshold_field_number = std::get<2>(e);
 
         std::string sensor_state_path = sysfs_path + "/" + sensor_path;
         sensor_state_path += (event_point == PixelAtoms::WaterEventReported::EventPoint::WaterEventReported_EventPoint_BOOT) ? "/boot_value" : "/latched_value";
 
-        std::string sensor_state_str;
-        if (!ReadFileToString(sensor_state_path, &sensor_state_str)) {
+        int sensor_state;
+        if (!readFileToInt(sensor_state_path, &sensor_state)) {
             continue;
         }
 
-        if (!sensor_state_str.compare(0, 3, "dry")) {
-             values[sensor_state_field_number - kVendorAtomOffset] =
-                     PixelAtoms::WaterEventReported::SensorState::WaterEventReported_SensorState_DRY;
-        } else if (sensor_state_str.compare(0, 3, "wet")) {
-             values[sensor_state_field_number- kVendorAtomOffset] =
-                PixelAtoms::WaterEventReported::SensorState::WaterEventReported_SensorState_WET;
-        } else if (!sensor_state_str.compare(0, 3, "invl")) {
-            values[sensor_state_field_number - kVendorAtomOffset] =
-                PixelAtoms::WaterEventReported::SensorState::WaterEventReported_SensorState_INVALID;
-        } else if (!sensor_state_str.compare(0, 3, "dis")) {
-                values[sensor_state_field_number - kVendorAtomOffset] =
-                        PixelAtoms::WaterEventReported::SensorState::WaterEventReported_SensorState_DISABLED;
-        } else {
-                values[sensor_state_field_number - kVendorAtomOffset] =
-                    PixelAtoms::WaterEventReported::SensorState::WaterEventReported_SensorState_SENSOR_STATE_UNKNOWN;
-            continue;
-        }
-
-        // report the threshold
-        std::string threshold_path = sysfs_path + "/" + sensor_path + "/threshold";
-        int sensor_threshold;
-        if (readFileToInt(threshold_path, &sensor_threshold)) {
-            values[PixelAtoms::WaterEventReported::kReferenceThresholdFieldNumber - kVendorAtomOffset] = sensor_threshold;
+        auto &sensor_state_field = values[sensor_state_field_number - kVendorAtomOffset];
+        switch (sensor_state) {
+            case 0:
+                sensor_state_field = PixelAtoms::WaterEventReported::SensorState::WaterEventReported_SensorState_DRY;
+                break;
+            case 1:
+                sensor_state_field = PixelAtoms::WaterEventReported::SensorState::WaterEventReported_SensorState_WET;
+                break;
+            case 2:
+                sensor_state_field = PixelAtoms::WaterEventReported::SensorState::WaterEventReported_SensorState_DISABLED;
+                break;
+            case 3:
+                sensor_state_field = PixelAtoms::WaterEventReported::SensorState::WaterEventReported_SensorState_INVALID;
+                break;
+            default:
+                sensor_state_field = PixelAtoms::WaterEventReported::SensorState::WaterEventReported_SensorState_SENSOR_STATE_UNKNOWN;
         }
     }
 
@@ -168,10 +160,20 @@ void WaterEventReporter::logEvent(const std::shared_ptr<IStats> &stats_client,
         ALOGE("Unable to report Water event.");
 }
 
+void WaterEventReporter::logBootEvent(const std::shared_ptr<IStats> &stats_client,
+                                      const std::vector<std::string> &sysfs_roots)
+{
+    ALOGD("Reporting at boot");
+    const PixelAtoms::WaterEventReported::EventPoint event_point =
+        PixelAtoms::WaterEventReported::EventPoint::WaterEventReported_EventPoint_BOOT;
+    for (const auto& sysfs_root : sysfs_roots)
+        logEvent(stats_client, event_point, sysfs_root);
+}
+
 void WaterEventReporter::logUevent(const std::shared_ptr<IStats> &stats_client,
                                    const std::string_view uevent_devpath)
 {
-    ALOGI("Reporting Water event");
+    ALOGI("Reporting at uevent");
     std::string dpath(uevent_devpath);
 
     std::vector<std::string> value = android::base::Split(dpath, "=");

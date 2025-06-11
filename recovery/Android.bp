@@ -9,7 +9,6 @@ cc_library_static {
         "-Wall",
         "-Wextra",
         "-Werror",
-        "-pedantic",
     ],
     srcs: [
         "recovery_ui.cpp",
@@ -35,7 +34,6 @@ cc_library_static {
         "-Wall",
         "-Wextra",
         "-Werror",
-        "-pedantic",
     ],
     srcs: [
         "recovery_watch_ui.cpp",

@@ -19,6 +19,7 @@
 #include <stdlib.h>
 
 #include <iostream>
+#include <vector>
 #include <map>
 #include <memory>
 #include <optional>
@@ -58,8 +59,10 @@ static int Usage(std::string_view name) {
   std::cerr << "  --set-display-mode <mode>     Write the display mode at boot\n";
   std::cerr << "  --clear-display-mode          Clear the display mode at boot\n";
   std::cerr << "  --set-trending-issue-pattern <string within 2000 byte> Write a regex string";
+  std::cerr << "  --wipe-flood-status           Clear flood status";
   std::cerr << "  --set-disable-faceauth-eval   Write disable-faceauth-eval flag\n";
   std::cerr << "  --clear-disable-faceauth-eval Clear disable-faceauth-eval flag\n";
+  std::cerr << "  --set-sota-boot      Set sota boot flag\n";
   std::cerr << "Writes the given hex string to the specified offset in vendor space in /misc "
                "partition.\nDefault offset is used for each action unless "
                "--override-vendor-space-offset is specified.\n";
@@ -91,6 +94,8 @@ int main(int argc, char** argv) {
     { "set-disable-faceauth-eval", no_argument, nullptr, 0 },
     { "clear-disable-faceauth-eval", no_argument, nullptr, 0 },
     { "set-trending-issue-pattern", required_argument, nullptr, 0 },
+    { "wipe-flood-status", no_argument, nullptr, 0 },
+    { "set-sota-boot", no_argument, nullptr, 0 },
     { nullptr, 0, nullptr, 0 },
   };
 
@@ -106,6 +111,7 @@ int main(int argc, char** argv) {
     { "clear-display-mode", MiscWriterActions::kClearDisplayMode },
     { "set-disable-faceauth-eval", MiscWriterActions::kSetDisableFaceauthEval },
     { "clear-disable-faceauth-eval", MiscWriterActions::kClearDisableFaceauthEval },
+    { "set-sota-boot", MiscWriterActions::kSetSotaBootFlag },
   };
 
   std::unique_ptr<MiscWriter> misc_writer;
@@ -259,18 +265,18 @@ int main(int argc, char** argv) {
       misc_writer = std::make_unique<MiscWriter>(MiscWriterActions::kWriteDstOffset,
                                                      std::to_string(dst_offset));
     } else if (option_name == "set-trending-issue-pattern"s) {
-      if (argc != 3) {
-        std::cerr << "Not the right amount of arguements, we expect 1 argument but were provide " << argc - 2;
-        return EXIT_FAILURE;
+      std::vector<char> merged;
+      for (int j = 2 ; j < argc ; j++) {
+        for (int i = 0 ; argv[j][i] != '\0'; ++i) {
+            merged.push_back(argv[j][i]);
+        }
+        merged.push_back('\0');
       }
-      if (misc_writer) {
-        LOG(ERROR) << "Misc writer action has already been set";
-        return Usage(argv[0]);
-      } else if (sizeof(argv[2]) >= 32) {
-        std::cerr << "String is too large, we only take strings smaller than 32, but you provide " << sizeof(argv[2]);
-        return Usage(argv[0]);
-      }
-      misc_writer = std::make_unique<MiscWriter>(MiscWriterActions::kWriteEagleEyePatterns, argv[2]);
+      std::string msg;
+      msg.assign(merged.begin(), merged.end());
+      misc_writer = std::make_unique<MiscWriter>(MiscWriterActions::kWriteEagleEyePatterns, msg);
+    } else if (option_name == "wipe-flood-status"s) {
+      misc_writer = std::make_unique<MiscWriter>(MiscWriterActions::kWipeFloodStatus, "\0\0");
     } else {
       LOG(FATAL) << "Unreachable path, option_name: " << option_name;
     }

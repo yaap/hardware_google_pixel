@@ -29,55 +29,49 @@ on property:sys.boot_completed=1 && property:persist.vendor.boot.zram.size=*
 
 on property:sys.boot_completed=1
     swapon_all /vendor/etc/fstab.zram.${vendor.zram.size}
-
-on property:sys.boot_completed=1
     chmod 444 /sys/kernel/debug/page_owner
+    # Allow max_usage_kb to be reset by system processes
+    chown system system /sys/kernel/vendor_mm/gcma_heap/trusty:faceauth_rawimage_heap/max_usage_kb
+    chmod 0660 /sys/kernel/vendor_mm/gcma_heap/trusty:faceauth_rawimage_heap/max_usage_kb
 
-    # Create mm_event trace point.
-    # For legacy devices, only mm_event is using this trace instance.
-    # Debugfs is only used in legacy devices and going to be deprecated.
-    # If others want to put more,it should get hard review from pixel-perf-team.
+on property:ro.debuggable=1 && property:sys.boot_completed=1
+    # Only enable pixel mm trace point in debug builds.
+    # If others want to put more events, it should get hard review from pixel-perf-team.
     mkdir /sys/kernel/tracing/instances/pixel 0755 system system
     chown system system /sys/kernel/tracing/instances/pixel/trace
     chmod 0660 /sys/kernel/tracing/instances/pixel/trace
     chown system system /sys/kernel/tracing/instances/pixel/tracing_on
     chmod 0660 /sys/kernel/tracing/instances/pixel/tracing_on
-    write /sys/kernel/tracing/instances/pixel/buffer_size_kb 64
+    write /sys/kernel/tracing/instances/pixel/buffer_size_kb 7
     write /sys/kernel/tracing/instances/pixel/events/cma/cma_alloc_busy_retry/enable 1
     write /sys/kernel/tracing/instances/pixel/events/cma/cma_alloc_start/enable 1
-    write /sys/kernel/tracing/instances/pixel/events/cma/cma_alloc_info/enable 1
+    write /sys/kernel/tracing/instances/pixel/events/cma/cma_alloc_finish/enable 1
     write /sys/kernel/tracing/instances/pixel/events/cma/cma_release/enable 1
-    write /sys/kernel/tracing/instances/pixel/events/chunk_heap/enable 1
-    write /sys/kernel/tracing/instances/pixel/events/dmabuf_heap/dma_buf_release/enable 1
-    write /sys/kernel/tracing/instances/pixel/events/trusty/trusty_dma_buf_put/enable 1
-
-    # Allow max_usage_kb to be reset by system processes
-    chown system system /sys/kernel/vendor_mm/gcma_heap/trusty:faceauth_rawimage_heap/max_usage_kb
-    chmod 0660 /sys/kernel/vendor_mm/gcma_heap/trusty:faceauth_rawimage_heap/max_usage_kb
 
 # turns off tracing right before bugreporting to keep more traces
-on property:init.svc.dumpstatez=running
+on property:ro.debuggable=1 && property:init.svc.dumpstatez=running
     write /sys/kernel/tracing/instances/pixel/tracing_on 0
 
-on property:init.svc.dumpstatez=stopped
+on property:ro.debuggable=1 && property:init.svc.dumpstatez=stopped
     write /sys/kernel/tracing/instances/pixel/tracing_on 1
 
-on property:init.svc.bugreport=running
+on property:ro.debuggable=1 && property:init.svc.bugreport=running
     write /sys/kernel/tracing/instances/pixel/tracing_on 0
 
-on property:init.svc.bugreport=stopped
+on property:ro.debuggable=1 && property:init.svc.bugreport=stopped
     write /sys/kernel/tracing/instances/pixel/tracing_on 1
 
-on property:init.svc.bugreportd=running
+on property:ro.debuggable=1 && property:init.svc.bugreportd=running
     write /sys/kernel/tracing/instances/pixel/tracing_on 0
 
-on property:init.svc.bugreportd=stopped
+on property:ro.debuggable=1 && property:init.svc.bugreportd=stopped
     write /sys/kernel/tracing/instances/pixel/tracing_on 1
 
 # max-ram-size experiment
 service vendor.set_max_ram_size /vendor/bin/misc_writer --set-max-ram-size ${persist.device_config.vendor_system_native_boot.max_ram_size:--1}
     disabled
     oneshot
+    user root
 
 on property:persist.device_config.vendor_system_native_boot.max_ram_size=*
     start vendor.set_max_ram_size

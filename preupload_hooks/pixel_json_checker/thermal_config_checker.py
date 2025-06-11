@@ -49,6 +49,63 @@ def get_thermal_modified_files(commit):
 
   return modified_files
 
+def validate_sensor_config(sensors):
+  """Validates configuration fields sensors in thermal config
+
+    Args: Json object for sensors
+
+    Returns:
+      Tuple of Success and error message.
+  """
+  for sensor in sensors:
+    sensor_name = sensor["Name"]
+    combination_size = 0
+    coefficients_size = 0
+    combination_type_size = 0
+    coefficients_type_size = 0
+    message = sensor_name + ": "
+
+    if "Combination" in sensor.keys():
+      combination_size = len(sensor["Combination"])
+
+    if "Coefficient" in sensor.keys():
+      coefficients_size = len(sensor["Coefficient"])
+
+      if combination_size != coefficients_size:
+        message += "Combination size does not match with Coefficient size"
+        return False, message
+
+    if "CombinationType" in sensor.keys():
+      combination_type_size = len(sensor["CombinationType"])
+
+      if combination_size != combination_type_size:
+        message += "Combination size does not match with CombinationType size"
+        return False, message
+
+    if "CoefficientType" in sensor.keys():
+      coefficients_type_size = len(sensor["CoefficientType"])
+
+      if coefficients_size != coefficients_type_size:
+        message += "Coefficient size does not match with CoefficientType size"
+        return False, message
+
+  return True, None
+
+def check_thermal_config(file_path, json_file):
+  """Validates configuration fields in thermal config
+
+    Args: Json object for thermal config
+
+    Returns:
+      Tuple of Success and error message.
+  """
+  if "Sensors" in json_file.keys():
+    status, message = validate_sensor_config(json_file["Sensors"])
+    if not status:
+      return False, file_path + ": " + message
+
+  return True, None
+
 def main(args=None):
   """Main function for checking thermal configs.
 
@@ -90,6 +147,9 @@ def main(args=None):
     try:
         json_file = json.loads(content)
         json_files[rel_path] = json_file
+        success, message = check_thermal_config(rel_path, json_file)
+        if not success:
+          return "Thermal config check error: " + message
     except ValueError as e:
       return "Malformed JSON file " + rel_path + " with message "+ str(e)
 

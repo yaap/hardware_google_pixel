@@ -2,6 +2,7 @@
 service vendor.theme_set /vendor/bin/misc_writer --set-dark-theme
     disabled
     oneshot
+    user root
 
 # Set dark boot flag when the device is provisioned.
 on property:persist.sys.device_provisioned=1
@@ -11,6 +12,7 @@ on property:persist.sys.device_provisioned=1
 service vendor.display_mode_set /vendor/bin/misc_writer --set-display-mode ${vendor.display.primary.boot_config}
     disabled
     oneshot
+    user root
 
 # Set preferred mode when resolution property changes
 on property:vendor.display.primary.boot_config=*

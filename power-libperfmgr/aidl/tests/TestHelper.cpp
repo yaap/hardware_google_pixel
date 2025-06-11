@@ -53,6 +53,9 @@ namespace aidl::google::hardware::power::impl::pixel {
             1.2,                      /* JankCheckTimeFactor */
             25,                       /* LowFrameRateThreshold */
             300,                      /* MaxRecordsNum */
+            true,                     /* HeuristicRampup */
+            1,                        /* DefaultRampupMult */
+            4,                        /* HighRampupMult */
             480,                      /* UclampMin_LoadUp */
             480,                      /* UclampMin_LoadReset */
             500,                      /* UclampMax_EfficientBase */

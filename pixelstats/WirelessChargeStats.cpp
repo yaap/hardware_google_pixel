@@ -43,6 +43,10 @@ int WirelessChargeStats::TranslateSysModeToAtomValue(const int sys_mode) {
             return PixelAtoms::ChargeStats::ADAPTER_TYPE_WPC_EPP;
         case 3:
             return PixelAtoms::ChargeStats::ADAPTER_TYPE_WPC_L7;
+        case 4:
+            return PixelAtoms::ChargeStats::ADAPTER_TYPE_WPC_MPP;
+        case 5:
+            return PixelAtoms::ChargeStats::ADAPTER_TYPE_WPC_MPP25;
         case 0xe0:
             return PixelAtoms::ChargeStats::ADAPTER_TYPE_DL;
         case 0xa0:

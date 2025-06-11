@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <pixelstats/JsonConfigUtils.h>
 #include <pixelstats/StatsHelper.h>
 #include <pixelstats/SysfsCollector.h>
 
@@ -33,6 +34,8 @@
 #include <cinttypes>
 #include <string>
 #include <filesystem>
+#include <fstream>
+#include <iostream>
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
@@ -87,66 +90,8 @@ using android::hardware::google::pixel::PixelAtoms::WaterEventReported;
 using android::hardware::google::pixel::PixelAtoms::ZramBdStat;
 using android::hardware::google::pixel::PixelAtoms::ZramMmStat;
 
-SysfsCollector::SysfsCollector(const struct SysfsPaths &sysfs_paths)
-    : kSlowioReadCntPath(sysfs_paths.SlowioReadCntPath),
-      kSlowioWriteCntPath(sysfs_paths.SlowioWriteCntPath),
-      kSlowioUnmapCntPath(sysfs_paths.SlowioUnmapCntPath),
-      kSlowioSyncCntPath(sysfs_paths.SlowioSyncCntPath),
-      kCycleCountBinsPath(sysfs_paths.CycleCountBinsPath),
-      kImpedancePath(sysfs_paths.ImpedancePath),
-      kCodecPath(sysfs_paths.CodecPath),
-      kCodec1Path(sysfs_paths.Codec1Path),
-      kSpeechDspPath(sysfs_paths.SpeechDspPath),
-      kBatteryCapacityCC(sysfs_paths.BatteryCapacityCC),
-      kBatteryCapacityVFSOC(sysfs_paths.BatteryCapacityVFSOC),
-      kUFSLifetimeA(sysfs_paths.UFSLifetimeA),
-      kUFSLifetimeB(sysfs_paths.UFSLifetimeB),
-      kUFSLifetimeC(sysfs_paths.UFSLifetimeC),
-      kF2fsStatsPath(sysfs_paths.F2fsStatsPath),
-      kZramMmStatPath("/sys/block/zram0/mm_stat"),
-      kZramBdStatPath("/sys/block/zram0/bd_stat"),
-      kEEPROMPath(sysfs_paths.EEPROMPath),
-      kBrownoutCsvPath(sysfs_paths.BrownoutCsvPath),
-      kBrownoutLogPath(sysfs_paths.BrownoutLogPath),
-      kBrownoutReasonProp(sysfs_paths.BrownoutReasonProp),
-      kPowerMitigationStatsPath(sysfs_paths.MitigationPath),
-      kPowerMitigationDurationPath(sysfs_paths.MitigationDurationPath),
-      kSpeakerTemperaturePath(sysfs_paths.SpeakerTemperaturePath),
-      kSpeakerExcursionPath(sysfs_paths.SpeakerExcursionPath),
-      kSpeakerHeartbeatPath(sysfs_paths.SpeakerHeartBeatPath),
-      kUFSErrStatsPath(sysfs_paths.UFSErrStatsPath),
-      kBlockStatsLength(sysfs_paths.BlockStatsLength),
-      kAmsRatePath(sysfs_paths.AmsRatePath),
-      kThermalStatsPaths(sysfs_paths.ThermalStatsPaths),
-      kCCARatePath(sysfs_paths.CCARatePath),
-      kTempResidencyAndResetPaths(sysfs_paths.TempResidencyAndResetPaths),
-      kLongIRQMetricsPath(sysfs_paths.LongIRQMetricsPath),
-      kStormIRQMetricsPath(sysfs_paths.StormIRQMetricsPath),
-      kIRQStatsResetPath(sysfs_paths.IRQStatsResetPath),
-      kResumeLatencyMetricsPath(sysfs_paths.ResumeLatencyMetricsPath),
-      kModemPcieLinkStatsPath(sysfs_paths.ModemPcieLinkStatsPath),
-      kWifiPcieLinkStatsPath(sysfs_paths.WifiPcieLinkStatsPath),
-      kDisplayStatsPaths(sysfs_paths.DisplayStatsPaths),
-      kDisplayPortStatsPaths(sysfs_paths.DisplayPortStatsPaths),
-      kDisplayPortDSCStatsPaths(sysfs_paths.DisplayPortDSCStatsPaths),
-      kDisplayPortMaxResolutionStatsPaths(sysfs_paths.DisplayPortMaxResolutionStatsPaths),
-      kHDCPStatsPaths(sysfs_paths.HDCPStatsPaths),
-      kPDMStatePath(sysfs_paths.PDMStatePath),
-      kWavesPath(sysfs_paths.WavesPath),
-      kAdaptedInfoCountPath(sysfs_paths.AdaptedInfoCountPath),
-      kAdaptedInfoDurationPath(sysfs_paths.AdaptedInfoDurationPath),
-      kPcmLatencyPath(sysfs_paths.PcmLatencyPath),
-      kPcmCountPath(sysfs_paths.PcmCountPath),
-      kTotalCallCountPath(sysfs_paths.TotalCallCountPath),
-      kOffloadEffectsIdPath(sysfs_paths.OffloadEffectsIdPath),
-      kOffloadEffectsDurationPath(sysfs_paths.OffloadEffectsDurationPath),
-      kBluetoothAudioUsagePath(sysfs_paths.BluetoothAudioUsagePath),
-      kGMSRPath(sysfs_paths.GMSRPath),
-      kMaxfgHistoryPath("/dev/maxfg_history"),
-      kFGModelLoadingPath(sysfs_paths.FGModelLoadingPath),
-      kFGLogBufferPath(sysfs_paths.FGLogBufferPath),
-      kSpeakerVersionPath(sysfs_paths.SpeakerVersionPath),
-      kWaterEventPath(sysfs_paths.WaterEventPath){}
+SysfsCollector::SysfsCollector(const Json::Value& configData)
+    : configData(configData) {}
 
 bool SysfsCollector::ReadFileToInt(const std::string &path, int *val) {
     return ReadFileToInt(path.c_str(), val);
@@ -178,12 +123,16 @@ bool SysfsCollector::ReadFileToInt(const char *const path, int *val) {
 void SysfsCollector::logBatteryChargeCycles(const std::shared_ptr<IStats> &stats_client) {
     std::string file_contents;
     int val;
-    if (kCycleCountBinsPath == nullptr || strlen(kCycleCountBinsPath) == 0) {
-        ALOGV("Battery charge cycle path not specified");
+
+    std::string cycleCountBinsPath = getCStringOrDefault(configData, "CycleCountBinsPath");
+
+    if (cycleCountBinsPath.empty()) {
+        ALOGV("Battery charge cycle path not specified in JSON");
         return;
     }
-    if (!ReadFileToString(kCycleCountBinsPath, &file_contents)) {
-        ALOGE("Unable to read battery charge cycles %s - %s", kCycleCountBinsPath, strerror(errno));
+
+    if (!ReadFileToString(cycleCountBinsPath, &file_contents)) {
+        ALOGE("Unable to read battery charge cycles %s - %s", cycleCountBinsPath.c_str(), strerror(errno));
         return;
     }
 
@@ -213,16 +162,22 @@ void SysfsCollector::logBatteryChargeCycles(const std::shared_ptr<IStats> &stats
  * Read the contents of kEEPROMPath and report them.
  */
 void SysfsCollector::logBatteryEEPROM(const std::shared_ptr<IStats> &stats_client) {
-    if (kEEPROMPath == nullptr || strlen(kEEPROMPath) == 0) {
-        ALOGV("Battery EEPROM path not specified");
+    std::string EEPROMPath = getCStringOrDefault(configData, "EEPROMPath");
+    std::vector<std::string> GMSRPath = readStringVectorFromJson(configData["GMSRPath"]);
+    std::string maxfgHistoryPath = getCStringOrDefault(configData, "MaxfgHistoryPath");
+    std::vector<std::string> FGModelLoadingPath = readStringVectorFromJson(configData["FGModelLoadingPath"]);
+    std::vector<std::string> FGLogBufferPath = readStringVectorFromJson(configData["FGLogBufferPath"]);
+
+    if (EEPROMPath.empty()) {
+        ALOGV("Battery EEPROM path not specified in JSON");
     } else {
-        battery_EEPROM_reporter_.checkAndReport(stats_client, kEEPROMPath);
+        battery_EEPROM_reporter_.checkAndReport(stats_client, EEPROMPath);
     }
 
-    battery_EEPROM_reporter_.checkAndReportGMSR(stats_client, kGMSRPath);
-    battery_EEPROM_reporter_.checkAndReportMaxfgHistory(stats_client, kMaxfgHistoryPath);
-    battery_EEPROM_reporter_.checkAndReportFGModelLoading(stats_client, kFGModelLoadingPath);
-    battery_EEPROM_reporter_.checkAndReportFGLearning(stats_client, kFGLogBufferPath);
+    battery_EEPROM_reporter_.checkAndReportGMSR(stats_client, GMSRPath);
+    battery_EEPROM_reporter_.checkAndReportMaxfgHistory(stats_client, maxfgHistoryPath);
+    battery_EEPROM_reporter_.checkAndReportFGModelLoading(stats_client, FGModelLoadingPath);
+    battery_EEPROM_reporter_.checkAndReportFGLearning(stats_client, FGLogBufferPath);
 }
 
 /**
@@ -235,7 +190,8 @@ void SysfsCollector::logBatteryHistoryValidation() {
         return;
     }
 
-    battery_EEPROM_reporter_.checkAndReportValidation(stats_client, kFGLogBufferPath);
+    std::vector<std::string> FGLogBufferPath = readStringVectorFromJson(configData["FGLogBufferPath"]);
+    battery_EEPROM_reporter_.checkAndReportValidation(stats_client, FGLogBufferPath);
 }
 
 /**
@@ -257,14 +213,17 @@ void SysfsCollector::logBatteryTTF(const std::shared_ptr<IStats> &stats_client) 
  */
 void SysfsCollector::logCodecFailed(const std::shared_ptr<IStats> &stats_client) {
     std::string file_contents;
-    if (kCodecPath == nullptr || strlen(kCodecPath) == 0) {
-        ALOGV("Audio codec path not specified");
+    std::string codecPath = getCStringOrDefault(configData, "CodecPath");
+
+    if (codecPath.empty()) {
+        ALOGV("Audio codec path not specified in JSON");
         return;
     }
-    if (!ReadFileToString(kCodecPath, &file_contents)) {
-        ALOGE("Unable to read codec state %s - %s", kCodecPath, strerror(errno));
+    if (!ReadFileToString(codecPath, &file_contents)) {
+        ALOGE("Unable to read codec state %s - %s", codecPath.c_str(), strerror(errno));
         return;
     }
+
     if (file_contents == "0") {
         return;
     } else {
@@ -281,18 +240,20 @@ void SysfsCollector::logCodecFailed(const std::shared_ptr<IStats> &stats_client)
  */
 void SysfsCollector::logCodec1Failed(const std::shared_ptr<IStats> &stats_client) {
     std::string file_contents;
-    if (kCodec1Path == nullptr || strlen(kCodec1Path) == 0) {
-        ALOGV("Audio codec1 path not specified");
+    std::string codec1Path = getCStringOrDefault(configData, "Codec1Path");
+
+    if (codec1Path.empty()) {
+        ALOGV("Audio codec1 path not specified in JSON");
         return;
     }
-    if (!ReadFileToString(kCodec1Path, &file_contents)) {
-        ALOGE("Unable to read codec1 state %s - %s", kCodec1Path, strerror(errno));
+    if (!ReadFileToString(codec1Path, &file_contents)) {
+        ALOGE("Unable to read codec1 state %s - %s", codec1Path.c_str(), strerror(errno));
         return;
     }
     if (file_contents == "0") {
         return;
     } else {
-        ALOGE("%s report hardware fail", kCodec1Path);
+        ALOGE("%s report hardware fail", codec1Path.c_str());
         VendorHardwareFailed failure;
         failure.set_hardware_type(VendorHardwareFailed::HARDWARE_FAILED_CODEC);
         failure.set_hardware_location(1);
@@ -302,20 +263,20 @@ void SysfsCollector::logCodec1Failed(const std::shared_ptr<IStats> &stats_client
 }
 
 void SysfsCollector::reportSlowIoFromFile(const std::shared_ptr<IStats> &stats_client,
-                                          const char *path,
-                                          const VendorSlowIo::IoOperation &operation_s) {
+                                            const std::string& path,
+                                            const VendorSlowIo::IoOperation &operation_s) {
     std::string file_contents;
-    if (path == nullptr || strlen(path) == 0) {
-        ALOGV("slow_io path not specified");
+    if (path.empty()) {
+        ALOGV("slow_io path not specified in JSON");
         return;
     }
-    if (!ReadFileToString(path, &file_contents)) {
-        ALOGE("Unable to read slowio %s - %s", path, strerror(errno));
+    if (!ReadFileToString(path.c_str(), &file_contents)) {
+        ALOGE("Unable to read slowio %s - %s", path.c_str(), strerror(errno));
         return;
     } else {
         int32_t slow_io_count = 0;
         if (sscanf(file_contents.c_str(), "%d", &slow_io_count) != 1) {
-            ALOGE("Unable to parse %s from file %s to int.", file_contents.c_str(), path);
+            ALOGE("Unable to parse %s from file %s to int.", file_contents.c_str(), path.c_str());
         } else if (slow_io_count > 0) {
             VendorSlowIo slow_io;
             slow_io.set_operation(operation_s);
@@ -323,8 +284,8 @@ void SysfsCollector::reportSlowIoFromFile(const std::shared_ptr<IStats> &stats_c
             reportSlowIo(stats_client, slow_io);
         }
         // Clear the stats
-        if (!android::base::WriteStringToFile("0", path, true)) {
-            ALOGE("Unable to clear SlowIO entry %s - %s", path, strerror(errno));
+        if (!android::base::WriteStringToFile("0", path.c_str(), true)) {
+            ALOGE("Unable to clear SlowIO entry %s - %s", path.c_str(), strerror(errno));
         }
     }
 }
@@ -333,10 +294,15 @@ void SysfsCollector::reportSlowIoFromFile(const std::shared_ptr<IStats> &stats_c
  * Check for slow IO operations.
  */
 void SysfsCollector::logSlowIO(const std::shared_ptr<IStats> &stats_client) {
-    reportSlowIoFromFile(stats_client, kSlowioReadCntPath, VendorSlowIo::READ);
-    reportSlowIoFromFile(stats_client, kSlowioWriteCntPath, VendorSlowIo::WRITE);
-    reportSlowIoFromFile(stats_client, kSlowioUnmapCntPath, VendorSlowIo::UNMAP);
-    reportSlowIoFromFile(stats_client, kSlowioSyncCntPath, VendorSlowIo::SYNC);
+    std::string slowioReadCntPath = getCStringOrDefault(configData, "SlowioReadCntPath");
+    std::string slowioWriteCntPath = getCStringOrDefault(configData, "SlowioWriteCntPath");
+    std::string slowioUnmapCntPath = getCStringOrDefault(configData, "SlowioUnmapCntPath");
+    std::string slowioSyncCntPath = getCStringOrDefault(configData, "SlowioSyncCntPath");
+
+    reportSlowIoFromFile(stats_client, slowioReadCntPath, VendorSlowIo::READ);
+    reportSlowIoFromFile(stats_client, slowioWriteCntPath, VendorSlowIo::WRITE);
+    reportSlowIoFromFile(stats_client, slowioUnmapCntPath, VendorSlowIo::UNMAP);
+    reportSlowIoFromFile(stats_client, slowioSyncCntPath, VendorSlowIo::SYNC);
 }
 
 /**
@@ -344,12 +310,15 @@ void SysfsCollector::logSlowIO(const std::shared_ptr<IStats> &stats_client) {
  */
 void SysfsCollector::logSpeakerImpedance(const std::shared_ptr<IStats> &stats_client) {
     std::string file_contents;
-    if (kImpedancePath == nullptr || strlen(kImpedancePath) == 0) {
-        ALOGV("Audio impedance path not specified");
+    std::string impedancePath = getCStringOrDefault(configData, "ImpedancePath");
+
+    if (impedancePath.empty()) {
+        ALOGV("Audio impedance path not specified in JSON");
         return;
     }
-    if (!ReadFileToString(kImpedancePath, &file_contents)) {
-        ALOGE("Unable to read impedance path %s", kImpedancePath);
+
+    if (!ReadFileToString(impedancePath, &file_contents)) {
+        ALOGE("Unable to read impedance path %s", impedancePath.c_str());
         return;
     }
 
@@ -384,41 +353,47 @@ void SysfsCollector::logSpeakerHealthStats(const std::shared_ptr<IStats> &stats_
     float excursion_mm[4];
     float heartbeat[4];
 
-    if (kImpedancePath == nullptr || strlen(kImpedancePath) == 0) {
-        ALOGD("Audio impedance path not specified");
+    std::string impedancePath = getCStringOrDefault(configData, "ImpedancePath");
+    std::string speakerTemperaturePath = getCStringOrDefault(configData, "SpeakerTemperaturePath");
+    std::string speakerExcursionPath = getCStringOrDefault(configData, "SpeakerExcursionPath");
+    std::string speakerHeartbeatPath = getCStringOrDefault(configData, "SpeakerHeartBeatPath");
+    std::string speakerVersionPath = getCStringOrDefault(configData, "SpeakerVersionPath");
+
+    if (impedancePath.empty()) {
+        ALOGV("Audio impedance path not specified in JSON");
         return;
-    } else if (!ReadFileToString(kImpedancePath, &file_contents_impedance)) {
-        ALOGD("Unable to read speaker impedance path %s", kImpedancePath);
+    } else if (!ReadFileToString(impedancePath, &file_contents_impedance)) {
+        ALOGD("Unable to read speaker impedance path %s", impedancePath.c_str());
         return;
     }
 
-    if (kSpeakerTemperaturePath == nullptr || strlen(kSpeakerTemperaturePath) == 0) {
-        ALOGD("Audio speaker temperature path not specified");
+    if (speakerTemperaturePath.empty()) {
+        ALOGV("Audio speaker temperature path not specified in JSON");
         return;
-    } else if (!ReadFileToString(kSpeakerTemperaturePath, &file_contents_temperature)) {
-        ALOGD("Unable to read speaker temperature path %s", kSpeakerTemperaturePath);
-        return;
-    }
-
-    if (kSpeakerExcursionPath == nullptr || strlen(kSpeakerExcursionPath) == 0) {
-        ALOGD("Audio speaker excursion path not specified");
-        return;
-    } else if (!ReadFileToString(kSpeakerExcursionPath, &file_contents_excursion)) {
-        ALOGD("Unable to read speaker excursion path %s", kSpeakerExcursionPath);
+    } else if (!ReadFileToString(speakerTemperaturePath, &file_contents_temperature)) {
+        ALOGD("Unable to read speaker temperature path %s", speakerTemperaturePath.c_str());
         return;
     }
 
-    if (kSpeakerHeartbeatPath == nullptr || strlen(kSpeakerHeartbeatPath) == 0) {
-        ALOGD("Audio speaker heartbeat path not specified");
+    if (speakerExcursionPath.empty()) {
+        ALOGV("Audio speaker excursion path not specified in JSON");
         return;
-    } else if (!ReadFileToString(kSpeakerHeartbeatPath, &file_contents_heartbeat)) {
-        ALOGD("Unable to read speaker heartbeat path %s", kSpeakerHeartbeatPath);
+    } else if (!ReadFileToString(speakerExcursionPath, &file_contents_excursion)) {
+        ALOGD("Unable to read speaker excursion path %s", speakerExcursionPath.c_str());
         return;
     }
 
-    if (kSpeakerVersionPath == nullptr || strlen(kSpeakerVersionPath) == 0) {
-        ALOGD("Audio speaker version path not specified. Keep version 0");
-    } else if (!ReadFileToInt(kSpeakerVersionPath, &version)) {
+    if (speakerHeartbeatPath.empty()) {
+        ALOGV("Audio speaker heartbeat path not specified in JSON");
+        return;
+    } else if (!ReadFileToString(speakerHeartbeatPath, &file_contents_heartbeat)) {
+        ALOGD("Unable to read speaker heartbeat path %s", speakerHeartbeatPath.c_str());
+        return;
+    }
+
+    if (speakerVersionPath.empty()) {
+        ALOGV("Audio speaker version path not specified in JSON. Keep version 0");
+    } else if (!ReadFileToInt(speakerVersionPath, &version)) {
         ALOGD("Unable to read version. Keep version 0");
     }
 
@@ -460,31 +435,43 @@ void SysfsCollector::logSpeakerHealthStats(const std::shared_ptr<IStats> &stats_
 }
 
 void SysfsCollector::logDisplayStats(const std::shared_ptr<IStats> &stats_client) {
-    display_stats_reporter_.logDisplayStats(stats_client, kDisplayStatsPaths,
+    std::vector<std::string> displayStatsPaths =
+        readStringVectorFromJson(configData["DisplayStatsPaths"]);
+    display_stats_reporter_.logDisplayStats(stats_client, displayStatsPaths,
                                             DisplayStatsReporter::DISP_PANEL_STATE);
 }
 
 void SysfsCollector::logDisplayPortStats(const std::shared_ptr<IStats> &stats_client) {
-    display_stats_reporter_.logDisplayStats(stats_client, kDisplayPortStatsPaths,
+    std::vector<std::string> displayPortStatsPaths =
+        readStringVectorFromJson(configData["DisplayPortStatsPaths"]);
+    display_stats_reporter_.logDisplayStats(stats_client, displayPortStatsPaths,
                                             DisplayStatsReporter::DISP_PORT_STATE);
 }
 
 void SysfsCollector::logHDCPStats(const std::shared_ptr<IStats> &stats_client) {
-    display_stats_reporter_.logDisplayStats(stats_client, kHDCPStatsPaths,
+    std::vector<std::string> HDCPStatsPaths =
+        readStringVectorFromJson(configData["HDCPStatsPaths"]);
+    display_stats_reporter_.logDisplayStats(stats_client, HDCPStatsPaths,
                                             DisplayStatsReporter::HDCP_STATE);
 }
 
 void SysfsCollector::logThermalStats(const std::shared_ptr<IStats> &stats_client) {
-    thermal_stats_reporter_.logThermalStats(stats_client, kThermalStatsPaths);
+    std::vector<std::string> thermalStatsPaths =
+        readStringVectorFromJson(configData["ThermalStatsPaths"]);
+    thermal_stats_reporter_.logThermalStats(stats_client, thermalStatsPaths);
 }
 
 void SysfsCollector::logDisplayPortDSCStats(const std::shared_ptr<IStats> &stats_client) {
-    display_stats_reporter_.logDisplayStats(stats_client, kDisplayPortDSCStatsPaths,
+    std::vector<std::string> displayPortDSCStatsPaths =
+        readStringVectorFromJson(configData["DisplayPortDSCStatsPaths"]);
+    display_stats_reporter_.logDisplayStats(stats_client, displayPortDSCStatsPaths,
                                             DisplayStatsReporter::DISP_PORT_DSC_STATE);
 }
 
 void SysfsCollector::logDisplayPortMaxResolutionStats(const std::shared_ptr<IStats> &stats_client) {
-    display_stats_reporter_.logDisplayStats(stats_client, kDisplayPortMaxResolutionStatsPaths,
+    std::vector<std::string> displayPortMaxResolutionStatsPaths =
+        readStringVectorFromJson(configData["DisplayPortMaxResolutionStatsPaths"]);
+    display_stats_reporter_.logDisplayStats(stats_client, displayPortMaxResolutionStatsPaths,
                                             DisplayStatsReporter::DISP_PORT_MAX_RES_STATE);
 }
 /**
@@ -492,12 +479,16 @@ void SysfsCollector::logDisplayPortMaxResolutionStats(const std::shared_ptr<ISta
  */
 void SysfsCollector::logSpeechDspStat(const std::shared_ptr<IStats> &stats_client) {
     std::string file_contents;
-    if (kSpeechDspPath == nullptr || strlen(kSpeechDspPath) == 0) {
-        ALOGV("Speech DSP path not specified");
+
+    std::string speechDspPath = getCStringOrDefault(configData, "SpeechDspPath");
+
+    if (speechDspPath.empty()) {
+        ALOGV("Speech DSP path not specified in JSON");
         return;
     }
-    if (!ReadFileToString(kSpeechDspPath, &file_contents)) {
-        ALOGE("Unable to read speech dsp path %s", kSpeechDspPath);
+
+    if (!ReadFileToString(speechDspPath, &file_contents)) {
+        ALOGE("Unable to read speech dsp path %s", speechDspPath.c_str());
         return;
     }
 
@@ -521,17 +512,22 @@ void SysfsCollector::logSpeechDspStat(const std::shared_ptr<IStats> &stats_clien
 
 void SysfsCollector::logBatteryCapacity(const std::shared_ptr<IStats> &stats_client) {
     std::string file_contents;
-    if (kBatteryCapacityCC == nullptr || strlen(kBatteryCapacityCC) == 0) {
-        ALOGV("Battery Capacity CC path not specified");
+
+    std::string batteryCapacityCC = getCStringOrDefault(configData, "BatteryCapacityCC");
+    std::string batteryCapacityVFSOC = getCStringOrDefault(configData, "BatteryCapacityVFSOC");
+
+    if (batteryCapacityCC.empty()) {
+        ALOGV("Battery Capacity CC path not specified in JSON");
         return;
     }
-    if (kBatteryCapacityVFSOC == nullptr || strlen(kBatteryCapacityVFSOC) == 0) {
-        ALOGV("Battery Capacity VFSOC path not specified");
+    if (batteryCapacityVFSOC.empty()) {
+        ALOGV("Battery Capacity VFSOC path not specified in JSON");
         return;
     }
+
     int delta_cc_sum, delta_vfsoc_sum;
-    if (!ReadFileToInt(kBatteryCapacityCC, &delta_cc_sum) ||
-            !ReadFileToInt(kBatteryCapacityVFSOC, &delta_vfsoc_sum))
+    if (!ReadFileToInt(batteryCapacityCC, &delta_cc_sum) ||
+        !ReadFileToInt(batteryCapacityVFSOC, &delta_vfsoc_sum))
         return;
 
     // Load values array
@@ -553,23 +549,28 @@ void SysfsCollector::logBatteryCapacity(const std::shared_ptr<IStats> &stats_cli
 
 void SysfsCollector::logUFSLifetime(const std::shared_ptr<IStats> &stats_client) {
     std::string file_contents;
-    if (kUFSLifetimeA == nullptr || strlen(kUFSLifetimeA) == 0) {
-        ALOGV("UFS lifetimeA path not specified");
+
+    std::string UFSLifetimeA = getCStringOrDefault(configData, "UFSLifetimeA");
+    std::string UFSLifetimeB = getCStringOrDefault(configData, "UFSLifetimeB");
+    std::string UFSLifetimeC = getCStringOrDefault(configData, "UFSLifetimeC");
+
+    if (UFSLifetimeA.empty()) {
+        ALOGV("UFS lifetimeA path not specified in JSON");
         return;
     }
-    if (kUFSLifetimeB == nullptr || strlen(kUFSLifetimeB) == 0) {
-        ALOGV("UFS lifetimeB path not specified");
+    if (UFSLifetimeB.empty()) {
+        ALOGV("UFS lifetimeB path not specified in JSON");
         return;
     }
-    if (kUFSLifetimeC == nullptr || strlen(kUFSLifetimeC) == 0) {
-        ALOGV("UFS lifetimeC path not specified");
+    if (UFSLifetimeC.empty()) {
+        ALOGV("UFS lifetimeC path not specified in JSON");
         return;
     }
 
     int lifetimeA = 0, lifetimeB = 0, lifetimeC = 0;
-    if (!ReadFileToInt(kUFSLifetimeA, &lifetimeA) ||
-        !ReadFileToInt(kUFSLifetimeB, &lifetimeB) ||
-        !ReadFileToInt(kUFSLifetimeC, &lifetimeC)) {
+    if (!ReadFileToInt(UFSLifetimeA, &lifetimeA) ||
+        !ReadFileToInt(UFSLifetimeB, &lifetimeB) ||
+        !ReadFileToInt(UFSLifetimeC, &lifetimeC)) {
         ALOGE("Unable to read UFS lifetime : %s", strerror(errno));
         return;
     }
@@ -597,13 +598,15 @@ void SysfsCollector::logUFSLifetime(const std::shared_ptr<IStats> &stats_client)
 void SysfsCollector::logUFSErrorStats(const std::shared_ptr<IStats> &stats_client) {
     int value, host_reset_count = 0;
 
-    if (kUFSErrStatsPath.empty() || strlen(kUFSErrStatsPath.front().c_str()) == 0) {
-        ALOGV("UFS host reset count path not specified");
+    std::vector<std::string> UFSErrStatsPath = readStringVectorFromJson(configData["UFSErrStatsPath"]);
+
+    if (UFSErrStatsPath.empty() || strlen(UFSErrStatsPath.front().c_str()) == 0) {
+        ALOGV("UFS host reset count path not specified in JSON");
         return;
     }
 
-    for (int i = 0; i < kUFSErrStatsPath.size(); i++) {
-        if (!ReadFileToInt(kUFSErrStatsPath[i], &value)) {
+    for (int i = 0; i < UFSErrStatsPath.size(); i++) {
+        if (!ReadFileToInt(UFSErrStatsPath[i], &value)) {
             ALOGE("Unable to read host reset count");
             return;
         }
@@ -646,47 +649,49 @@ void SysfsCollector::logF2fsStats(const std::shared_ptr<IStats> &stats_client) {
     int dirty, free, cp_calls_fg, gc_calls_fg, moved_block_fg, vblocks;
     int cp_calls_bg, gc_calls_bg, moved_block_bg;
 
-    if (kF2fsStatsPath == nullptr) {
-        ALOGE("F2fs stats path not specified");
+    std::string F2fsStatsPath = getCStringOrDefault(configData, "F2fsStatsPath");
+
+    if (F2fsStatsPath.empty()) {
+        ALOGV("F2fs stats path not specified in JSON");
         return;
     }
 
     const std::string userdataBlock = getUserDataBlock();
-    const std::string kF2fsStatsDir = kF2fsStatsPath + userdataBlock;
+    const std::string F2fsStatsDir = F2fsStatsPath + userdataBlock;
 
-    if (!ReadFileToInt(kF2fsStatsDir + "/dirty_segments", &dirty)) {
+    if (!ReadFileToInt(F2fsStatsDir + "/dirty_segments", &dirty)) {
         ALOGV("Unable to read dirty segments");
     }
 
-    if (!ReadFileToInt(kF2fsStatsDir + "/free_segments", &free)) {
+    if (!ReadFileToInt(F2fsStatsDir + "/free_segments", &free)) {
         ALOGV("Unable to read free segments");
     }
 
-    if (!ReadFileToInt(kF2fsStatsDir + "/cp_foreground_calls", &cp_calls_fg)) {
+    if (!ReadFileToInt(F2fsStatsDir + "/cp_foreground_calls", &cp_calls_fg)) {
         ALOGV("Unable to read cp_foreground_calls");
     }
 
-    if (!ReadFileToInt(kF2fsStatsDir + "/cp_background_calls", &cp_calls_bg)) {
+    if (!ReadFileToInt(F2fsStatsDir + "/cp_background_calls", &cp_calls_bg)) {
         ALOGV("Unable to read cp_background_calls");
     }
 
-    if (!ReadFileToInt(kF2fsStatsDir + "/gc_foreground_calls", &gc_calls_fg)) {
+    if (!ReadFileToInt(F2fsStatsDir + "/gc_foreground_calls", &gc_calls_fg)) {
         ALOGV("Unable to read gc_foreground_calls");
     }
 
-    if (!ReadFileToInt(kF2fsStatsDir + "/gc_background_calls", &gc_calls_bg)) {
+    if (!ReadFileToInt(F2fsStatsDir + "/gc_background_calls", &gc_calls_bg)) {
         ALOGV("Unable to read gc_background_calls");
     }
 
-    if (!ReadFileToInt(kF2fsStatsDir + "/moved_blocks_foreground", &moved_block_fg)) {
+    if (!ReadFileToInt(F2fsStatsDir + "/moved_blocks_foreground", &moved_block_fg)) {
         ALOGV("Unable to read moved_blocks_foreground");
     }
 
-    if (!ReadFileToInt(kF2fsStatsDir + "/moved_blocks_background", &moved_block_bg)) {
+    if (!ReadFileToInt(F2fsStatsDir + "/moved_blocks_background", &moved_block_bg)) {
         ALOGV("Unable to read moved_blocks_background");
     }
 
-    if (!ReadFileToInt(kF2fsStatsDir + "/avg_vblocks", &vblocks)) {
+    if (!ReadFileToInt(F2fsStatsDir + "/avg_vblocks", &vblocks)) {
         ALOGV("Unable to read avg_vblocks");
     }
 
@@ -725,14 +730,16 @@ void SysfsCollector::logF2fsStats(const std::shared_ptr<IStats> &stats_client) {
 void SysfsCollector::logF2fsAtomicWriteInfo(const std::shared_ptr<IStats> &stats_client) {
     int peak_atomic_write, committed_atomic_block, revoked_atomic_block;
 
-    if (kF2fsStatsPath == nullptr) {
-        ALOGV("F2fs stats path not specified");
+    std::string F2fsStatsPath = getCStringOrDefault(configData, "F2fsStatsPath");
+
+    if (F2fsStatsPath.empty()) {
+        ALOGV("F2fs stats path not specified in JSON");
         return;
     }
 
     std::string userdataBlock = getUserDataBlock();
 
-    std::string path = kF2fsStatsPath + (userdataBlock + "/peak_atomic_write");
+    std::string path = F2fsStatsPath + (userdataBlock + "/peak_atomic_write");
     if (!ReadFileToInt(path, &peak_atomic_write)) {
         ALOGE("Unable to read peak_atomic_write");
         return;
@@ -743,7 +750,7 @@ void SysfsCollector::logF2fsAtomicWriteInfo(const std::shared_ptr<IStats> &stats
         }
     }
 
-    path = kF2fsStatsPath + (userdataBlock + "/committed_atomic_block");
+    path = F2fsStatsPath + (userdataBlock + "/committed_atomic_block");
     if (!ReadFileToInt(path, &committed_atomic_block)) {
         ALOGE("Unable to read committed_atomic_block");
         return;
@@ -754,7 +761,7 @@ void SysfsCollector::logF2fsAtomicWriteInfo(const std::shared_ptr<IStats> &stats
         }
     }
 
-    path = kF2fsStatsPath + (userdataBlock + "/revoked_atomic_block");
+    path = F2fsStatsPath + (userdataBlock + "/revoked_atomic_block");
     if (!ReadFileToInt(path, &revoked_atomic_block)) {
         ALOGE("Unable to read revoked_atomic_block");
         return;
@@ -787,20 +794,22 @@ void SysfsCollector::logF2fsAtomicWriteInfo(const std::shared_ptr<IStats> &stats
 void SysfsCollector::logF2fsCompressionInfo(const std::shared_ptr<IStats> &stats_client) {
     int compr_written_blocks, compr_saved_blocks, compr_new_inodes;
 
-    if (kF2fsStatsPath == nullptr) {
-        ALOGV("F2fs stats path not specified");
+    std::string F2fsStatsPath = getCStringOrDefault(configData, "F2fsStatsPath");
+
+    if (F2fsStatsPath.empty()) {
+        ALOGV("F2fs stats path not specified in JSON");
         return;
     }
 
     std::string userdataBlock = getUserDataBlock();
 
-    std::string path = kF2fsStatsPath + (userdataBlock + "/compr_written_block");
+    std::string path = F2fsStatsPath + (userdataBlock + "/compr_written_block");
     if (!ReadFileToInt(path, &compr_written_blocks)) {
         ALOGE("Unable to read compression written blocks");
         return;
     }
 
-    path = kF2fsStatsPath + (userdataBlock + "/compr_saved_block");
+    path = F2fsStatsPath + (userdataBlock + "/compr_saved_block");
     if (!ReadFileToInt(path, &compr_saved_blocks)) {
         ALOGE("Unable to read compression saved blocks");
         return;
@@ -811,7 +820,7 @@ void SysfsCollector::logF2fsCompressionInfo(const std::shared_ptr<IStats> &stats
         }
     }
 
-    path = kF2fsStatsPath + (userdataBlock + "/compr_new_inode");
+    path = F2fsStatsPath + (userdataBlock + "/compr_new_inode");
     if (!ReadFileToInt(path, &compr_new_inodes)) {
         ALOGE("Unable to read compression new inodes");
         return;
@@ -843,7 +852,13 @@ void SysfsCollector::logF2fsCompressionInfo(const std::shared_ptr<IStats> &stats
 }
 
 int SysfsCollector::getReclaimedSegments(const std::string &mode) {
-    std::string userDataStatsPath = kF2fsStatsPath + getUserDataBlock();
+    std::string F2fsStatsPath = getCStringOrDefault(configData, "F2fsStatsPath");
+
+    if (F2fsStatsPath.empty()) {
+        ALOGV("F2fs stats path not specified in JSON");
+        return -1;
+    }
+    std::string userDataStatsPath = F2fsStatsPath + getUserDataBlock();
     std::string gcSegmentModePath = userDataStatsPath + "/gc_segment_mode";
     std::string gcReclaimedSegmentsPath = userDataStatsPath + "/gc_reclaimed_segments";
     int reclaimed_segments;
@@ -873,11 +888,6 @@ void SysfsCollector::logF2fsGcSegmentInfo(const std::shared_ptr<IStats> &stats_c
     std::string gc_urgent_high_mode = std::to_string(4);    // GC urgent high mode
     std::string gc_urgent_low_mode = std::to_string(5);     // GC urgent low mode
     std::string gc_urgent_mid_mode = std::to_string(6);     // GC urgent mid mode
-
-    if (kF2fsStatsPath == nullptr) {
-        ALOGV("F2fs stats path not specified");
-        return;
-    }
 
     reclaimed_segments_normal = getReclaimedSegments(gc_normal_mode);
     if (reclaimed_segments_normal == -1) return;
@@ -1038,9 +1048,16 @@ void SysfsCollector::logBlockStatsReported(const std::shared_ptr<IStats> &stats_
         stats.push_back(stat);
     }
 
-    if (stats.size() < kBlockStatsLength) {
+    int blockStatsLength = getIntOrDefault(configData, "BlockStatsLength");
+
+    if (blockStatsLength <= 0) {
+        ALOGV("BlockStatsLength not found or invalid in JSON");
+        return;
+    }
+
+    if (stats.size() < blockStatsLength) {
         ALOGE("block layer stat format is incorrect %s, length %zu/%d", file_contents.c_str(),
-              stats.size(), kBlockStatsLength);
+              stats.size(), blockStatsLength);
         return;
     }
 
@@ -1077,7 +1094,10 @@ void SysfsCollector::logBlockStatsReported(const std::shared_ptr<IStats> &stats_
 }
 
 void SysfsCollector::logTempResidencyStats(const std::shared_ptr<IStats> &stats_client) {
-    for (const auto &temp_residency_and_reset_path : kTempResidencyAndResetPaths) {
+    std::vector<std::pair<std::string, std::string>> tempResidencyAndResetPaths =
+        readStringPairVectorFromJson(configData["TempResidencyAndResetPaths"]);
+
+    for (const auto &temp_residency_and_reset_path : tempResidencyAndResetPaths) {
         temp_residency_reporter_.logTempResidencyStats(stats_client,
                                                        temp_residency_and_reset_path.first,
                                                        temp_residency_and_reset_path.second);
@@ -1086,13 +1106,10 @@ void SysfsCollector::logTempResidencyStats(const std::shared_ptr<IStats> &stats_
 
 void SysfsCollector::reportZramMmStat(const std::shared_ptr<IStats> &stats_client) {
     std::string file_contents;
-    if (!kZramMmStatPath) {
-        ALOGV("ZramMmStat path not specified");
-        return;
-    }
+    std::string ZramMmStatPath = "/sys/block/zram0/mm_stat";
 
-    if (!ReadFileToString(kZramMmStatPath, &file_contents)) {
-        ALOGE("Unable to ZramMmStat %s - %s", kZramMmStatPath, strerror(errno));
+    if (!ReadFileToString(ZramMmStatPath.c_str(), &file_contents)) {
+        ALOGE("Unable to ZramMmStat %s - %s", ZramMmStatPath.c_str(), strerror(errno));
         return;
     } else {
         int64_t orig_data_size = 0;
@@ -1113,7 +1130,7 @@ void SysfsCollector::reportZramMmStat(const std::shared_ptr<IStats> &stats_clien
                    &orig_data_size, &compr_data_size, &mem_used_total, &mem_limit, &max_used_total,
                    &same_pages, &pages_compacted, &huge_pages, &huge_pages_since_boot) < 8) {
             ALOGE("Unable to parse ZramMmStat %s from file %s to int.",
-                    file_contents.c_str(), kZramMmStatPath);
+                    file_contents.c_str(), ZramMmStatPath.c_str());
         }
 
         // Load values array.
@@ -1153,13 +1170,10 @@ void SysfsCollector::reportZramMmStat(const std::shared_ptr<IStats> &stats_clien
 
 void SysfsCollector::reportZramBdStat(const std::shared_ptr<IStats> &stats_client) {
     std::string file_contents;
-    if (!kZramBdStatPath) {
-        ALOGV("ZramBdStat path not specified");
-        return;
-    }
+    std::string ZramBdStatPath = "/sys/block/zram0/bd_stat";
 
-    if (!ReadFileToString(kZramBdStatPath, &file_contents)) {
-        ALOGE("Unable to ZramBdStat %s - %s", kZramBdStatPath, strerror(errno));
+    if (!ReadFileToString(ZramBdStatPath.c_str(), &file_contents)) {
+        ALOGE("Unable to ZramBdStat %s - %s", ZramBdStatPath.c_str(), strerror(errno));
         return;
     } else {
         int64_t bd_count = 0;
@@ -1169,7 +1183,7 @@ void SysfsCollector::reportZramBdStat(const std::shared_ptr<IStats> &stats_clien
         if (sscanf(file_contents.c_str(), "%" SCNd64 " %" SCNd64 " %" SCNd64,
                                 &bd_count, &bd_reads, &bd_writes) != 3) {
             ALOGE("Unable to parse ZramBdStat %s from file %s to int.",
-                    file_contents.c_str(), kZramBdStatPath);
+                    file_contents.c_str(), ZramBdStatPath.c_str());
         }
 
         // Load values array
@@ -1200,14 +1214,16 @@ void SysfsCollector::logZramStats(const std::shared_ptr<IStats> &stats_client) {
 void SysfsCollector::logBootStats(const std::shared_ptr<IStats> &stats_client) {
     int mounted_time_sec = 0;
 
-    if (kF2fsStatsPath == nullptr) {
-        ALOGE("F2fs stats path not specified");
+    std::string F2fsStatsPath = getCStringOrDefault(configData, "F2fsStatsPath");
+
+    if (F2fsStatsPath.empty()) {
+        ALOGV("F2fs stats path not specified in JSON");
         return;
     }
 
     std::string userdataBlock = getUserDataBlock();
 
-    if (!ReadFileToInt(kF2fsStatsPath + (userdataBlock + "/mounted_time_sec"), &mounted_time_sec)) {
+    if (!ReadFileToInt(F2fsStatsPath + (userdataBlock + "/mounted_time_sec"), &mounted_time_sec)) {
         ALOGV("Unable to read mounted_time_sec");
         return;
     }
@@ -1251,11 +1267,15 @@ void SysfsCollector::logVendorAudioHardwareStats(const std::shared_ptr<IStats> &
     uint32_t total_call_voice = 0, total_call_voip = 0;
     bool isAmsReady = false, isCCAReady = false;
 
-    if (kAmsRatePath == nullptr) {
-        ALOGD("Audio AMS Rate path not specified");
+    std::string AmsRatePath = getCStringOrDefault(configData, "AmsRatePath");
+    std::string CCARatePath = getCStringOrDefault(configData, "CCARatePath");
+    std::string TotalCallCountPath = getCStringOrDefault(configData, "TotalCallCountPath");
+
+    if (AmsRatePath.empty()) {
+        ALOGV("Audio AMS Rate path not specified in JSON");
     } else {
-        if (!ReadFileToString(kAmsRatePath, &file_contents)) {
-            ALOGD("Unable to read ams_rate path %s", kAmsRatePath);
+        if (!ReadFileToString(AmsRatePath.c_str(), &file_contents)) {
+            ALOGD("Unable to read ams_rate path %s", AmsRatePath.c_str());
         } else {
             if (sscanf(file_contents.c_str(), "%u", &milli_ams_rate) != 1) {
                 ALOGD("Unable to parse ams_rate %s", file_contents.c_str());
@@ -1266,11 +1286,11 @@ void SysfsCollector::logVendorAudioHardwareStats(const std::shared_ptr<IStats> &
         }
     }
 
-    if (kCCARatePath == nullptr) {
-        ALOGD("Audio CCA Rate path not specified");
+    if (CCARatePath.empty()) {
+        ALOGV("Audio CCA Rate path not specified in JSON");
     } else {
-        if (!ReadFileToString(kCCARatePath, &file_contents)) {
-            ALOGD("Unable to read cca_rate path %s", kCCARatePath);
+        if (!ReadFileToString(CCARatePath.c_str(), &file_contents)) {
+            ALOGD("Unable to read cca_rate path %s", CCARatePath.c_str());
         } else {
             if (sscanf(file_contents.c_str(), "%u %u %u %u", &c1, &c2, &c3, &c4) != 4) {
                 ALOGD("Unable to parse cca rates %s", file_contents.c_str());
@@ -1280,11 +1300,11 @@ void SysfsCollector::logVendorAudioHardwareStats(const std::shared_ptr<IStats> &
         }
     }
 
-    if (kTotalCallCountPath == nullptr) {
-        ALOGD("Total call count path not specified");
+    if (TotalCallCountPath.empty()) {
+        ALOGV("Total call count path not specified in JSON");
     } else {
-        if (!ReadFileToString(kTotalCallCountPath, &file_contents)) {
-            ALOGD("Unable to read total call path %s", kTotalCallCountPath);
+        if (!ReadFileToString(TotalCallCountPath.c_str(), &file_contents)) {
+            ALOGD("Unable to read total call path %s", TotalCallCountPath.c_str());
         } else {
             if (sscanf(file_contents.c_str(), "%u %u", &total_call_voice, &total_call_voip) != 2) {
                 ALOGD("Unable to parse total call %s", file_contents.c_str());
@@ -1373,12 +1393,13 @@ void SysfsCollector::logVendorAudioHardwareStats(const std::shared_ptr<IStats> &
 void SysfsCollector::logVendorAudioPdmStatsReported(const std::shared_ptr<IStats> &stats_client) {
     std::string file_contents;
     std::vector<int> pdm_states;
+    std::string PDMStatePath = getCStringOrDefault(configData, "PDMStatePath");
 
-    if (kPDMStatePath == nullptr) {
-        ALOGD("Audio PDM State path not specified");
+    if (PDMStatePath.empty()) {
+        ALOGV("Audio PDM State path not specified in JSON");
     } else {
-        if (!ReadFileToString(kPDMStatePath, &file_contents)) {
-            ALOGD("Unable to read PDM State path %s", kPDMStatePath);
+        if (!ReadFileToString(PDMStatePath.c_str(), &file_contents)) {
+            ALOGD("Unable to read PDM State path %s", PDMStatePath.c_str());
         } else {
             std::stringstream file_content_stream(file_contents);
             while (file_content_stream.good()) {
@@ -1436,17 +1457,18 @@ void SysfsCollector::logVendorAudioPdmStatsReported(const std::shared_ptr<IStats
 void SysfsCollector::logWavesStats(const std::shared_ptr<IStats> &stats_client) {
     std::string file_contents;
     std::vector<std::vector<int>> volume_duration_per_instance;
+    std::string wavesPath = getCStringOrDefault(configData, "WavesPath");
 
     constexpr int num_instances = 5;
     constexpr int num_volume = 10;
 
-    if (kWavesPath == nullptr) {
-        ALOGD("Audio Waves stats path not specified");
+    if (wavesPath.empty()) {
+        ALOGV("Audio Waves stats path not specified in JSON");
         return;
     }
 
-    if (!ReadFileToString(kWavesPath, &file_contents)) {
-        ALOGD("Unable to read Wave stats path %s", kWavesPath);
+    if (!ReadFileToString(wavesPath.c_str(), &file_contents)) {
+        ALOGD("Unable to read Wave stats path %s", wavesPath.c_str());
     } else {
         std::stringstream file_content_stream(file_contents);
         int duration;
@@ -1526,21 +1548,23 @@ void SysfsCollector::logAdaptedInfoStats(const std::shared_ptr<IStats> &stats_cl
     std::string file_contents;
     std::vector<int> count_per_feature;
     std::vector<int> duration_per_feature;
+    std::string adaptedInfoCountPath = getCStringOrDefault(configData, "AdaptedInfoCountPath");
+    std::string adaptedInfoDurationPath = getCStringOrDefault(configData, "AdaptedInfoDurationPath");
 
     constexpr int num_features = 6;
 
-    if (kAdaptedInfoCountPath == nullptr) {
-        ALOGD("Audio Adapted Info Count stats path not specified");
+    if (adaptedInfoCountPath.empty()) {
+        ALOGV("Audio Adapted Info Count stats path not specified in JSON");
         return;
     }
 
-    if (kAdaptedInfoDurationPath == nullptr) {
-        ALOGD("Audio Adapted Info Duration stats path not specified");
+    if (adaptedInfoDurationPath.empty()) {
+        ALOGV("Audio Adapted Info Duration stats path not specified in JSON");
         return;
     }
 
-    if (!ReadFileToString(kAdaptedInfoCountPath, &file_contents)) {
-        ALOGD("Unable to read Adapted Info Count stats path %s", kAdaptedInfoCountPath);
+    if (!ReadFileToString(adaptedInfoCountPath.c_str(), &file_contents)) {
+        ALOGD("Unable to read Adapted Info Count stats path %s", adaptedInfoCountPath.c_str());
     } else {
         std::stringstream file_content_stream(file_contents);
         int count;
@@ -1555,8 +1579,8 @@ void SysfsCollector::logAdaptedInfoStats(const std::shared_ptr<IStats> &stats_cl
         return;
     }
 
-    if (!ReadFileToString(kAdaptedInfoDurationPath, &file_contents)) {
-        ALOGD("Unable to read Adapted Info Duration stats path %s", kAdaptedInfoDurationPath);
+    if (!ReadFileToString(adaptedInfoDurationPath.c_str(), &file_contents)) {
+        ALOGD("Unable to read Adapted Info Duration stats path %s", adaptedInfoDurationPath.c_str());
     } else {
         std::stringstream file_content_stream(file_contents);
         int duration;
@@ -1610,21 +1634,22 @@ void SysfsCollector::logPcmUsageStats(const std::shared_ptr<IStats> &stats_clien
     std::string file_contents;
     std::vector<int> count_per_type;
     std::vector<int> latency_per_type;
+    std::string pcmLatencyPath = getCStringOrDefault(configData, "PcmLatencyPath");
+    std::string pcmCountPath = getCStringOrDefault(configData, "PcmCountPath");
 
     constexpr int num_type = 19;
-
-    if (kPcmLatencyPath == nullptr) {
-        ALOGD("PCM Latency path not specified");
+    if (pcmLatencyPath.empty()) {
+        ALOGV("PCM Latency path not specified in JSON");
         return;
     }
 
-    if (kPcmCountPath == nullptr) {
-        ALOGD("PCM Count path not specified");
+    if (pcmCountPath.empty()) {
+        ALOGV("PCM Count path not specified in JSON");
         return;
     }
 
-    if (!ReadFileToString(kPcmCountPath, &file_contents)) {
-        ALOGD("Unable to read PCM Count path %s", kPcmCountPath);
+    if (!ReadFileToString(pcmCountPath.c_str(), &file_contents)) {
+        ALOGD("Unable to read PCM Count path %s", pcmCountPath.c_str());
     } else {
         std::stringstream file_content_stream(file_contents);
         int count;
@@ -1639,8 +1664,8 @@ void SysfsCollector::logPcmUsageStats(const std::shared_ptr<IStats> &stats_clien
         return;
     }
 
-    if (!ReadFileToString(kPcmLatencyPath, &file_contents)) {
-        ALOGD("Unable to read PCM Latency path %s", kPcmLatencyPath);
+    if (!ReadFileToString(pcmLatencyPath.c_str(), &file_contents)) {
+        ALOGD("Unable to read PCM Latency path %s", pcmLatencyPath.c_str());
     } else {
         std::stringstream file_content_stream(file_contents);
         int duration;
@@ -1692,19 +1717,21 @@ void SysfsCollector::logOffloadEffectsStats(const std::shared_ptr<IStats> &stats
     std::string file_contents;
     std::vector<int> uuids;
     std::vector<int> durations;
+    std::string offloadEffectsIdPath = getCStringOrDefault(configData, "OffloadEffectsIdPath");
+    std::string offloadEffectsDurationPath = getCStringOrDefault(configData, "OffloadEffectsDurationPath");
 
-    if (kOffloadEffectsIdPath == nullptr) {
-        ALOGD("Offload Effects ID Path is not specified");
+    if (offloadEffectsIdPath.empty()) {
+        ALOGV("Offload Effects ID Path is not specified in JSON");
         return;
     }
 
-    if (kOffloadEffectsDurationPath == nullptr) {
-        ALOGD("Offload Effects Duration Path is not specified");
+    if (offloadEffectsDurationPath.empty()) {
+        ALOGV("Offload Effects Duration Path is not specified in JSON");
         return;
     }
 
-    if (!ReadFileToString(kOffloadEffectsIdPath, &file_contents)) {
-        ALOGD("Unable to read Offload Effect ID path %s", kOffloadEffectsIdPath);
+    if (!ReadFileToString(offloadEffectsIdPath.c_str(), &file_contents)) {
+        ALOGD("Unable to read Offload Effect ID path %s", offloadEffectsIdPath.c_str());
     } else {
         std::stringstream file_content_stream(file_contents);
         int uuid;
@@ -1713,8 +1740,8 @@ void SysfsCollector::logOffloadEffectsStats(const std::shared_ptr<IStats> &stats
         }
     }
 
-    if (!ReadFileToString(kOffloadEffectsDurationPath, &file_contents)) {
-        ALOGD("Unable to read Offload Effect duration path %s", kOffloadEffectsDurationPath);
+    if (!ReadFileToString(offloadEffectsDurationPath.c_str(), &file_contents)) {
+        ALOGD("Unable to read Offload Effect duration path %s", offloadEffectsDurationPath.c_str());
     } else {
         std::stringstream file_content_stream(file_contents);
         int duration;
@@ -1772,16 +1799,17 @@ void SysfsCollector::logOffloadEffectsStats(const std::shared_ptr<IStats> &stats
 void SysfsCollector::logBluetoothAudioUsage(const std::shared_ptr<IStats> &stats_client) {
     std::string file_contents;
     std::vector<int> duration_per_codec;
+    std::string bluetoothAudioUsagePath = getCStringOrDefault(configData, "BluetoothAudioUsagePath");
 
     constexpr int num_codec = 5;
 
-    if (kBluetoothAudioUsagePath == nullptr) {
-        ALOGD("Bluetooth Audio stats path not specified");
+    if (bluetoothAudioUsagePath.empty()) {
+        ALOGV("Bluetooth Audio stats path not specified in JSON");
         return;
     }
 
-    if (!ReadFileToString(kBluetoothAudioUsagePath, &file_contents)) {
-        ALOGD("Unable to read Bluetooth Audio stats path %s", kBluetoothAudioUsagePath);
+    if (!ReadFileToString(bluetoothAudioUsagePath.c_str(), &file_contents)) {
+        ALOGD("Unable to read Bluetooth Audio stats path %s", bluetoothAudioUsagePath.c_str());
     } else {
         std::stringstream file_content_stream(file_contents);
         int duration;
@@ -1831,16 +1859,18 @@ void SysfsCollector::logBluetoothAudioUsage(const std::shared_ptr<IStats> &stats
  */
 void SysfsCollector::logVendorResumeLatencyStats(const std::shared_ptr<IStats> &stats_client) {
     std::string uart_enabled = android::base::GetProperty("init.svc.console", "");
+    std::string resumeLatencyMetricsPath = getCStringOrDefault(configData, "ResumeLatencyMetricsPath");
+
     if (uart_enabled == "running") {
         return;
     }
     std::string file_contents;
-    if (!kResumeLatencyMetricsPath) {
-        ALOGE("ResumeLatencyMetrics path not specified");
+    if (resumeLatencyMetricsPath.empty()) {
+        ALOGV("ResumeLatencyMetrics path not specified in JSON");
         return;
     }
-    if (!ReadFileToString(kResumeLatencyMetricsPath, &file_contents)) {
-        ALOGE("Unable to ResumeLatencyMetric %s - %s", kResumeLatencyMetricsPath, strerror(errno));
+    if (!ReadFileToString(resumeLatencyMetricsPath.c_str(), &file_contents)) {
+        ALOGE("Unable to ResumeLatencyMetric %s - %s", resumeLatencyMetricsPath.c_str(), strerror(errno));
         return;
     }
 
@@ -1965,28 +1995,31 @@ void process_irqatom_values(std::string file_contents, int *offset,
  */
 void SysfsCollector::logVendorLongIRQStatsReported(const std::shared_ptr<IStats> &stats_client) {
     std::string uart_enabled = android::base::GetProperty("init.svc.console", "");
+    std::string longIRQMetricsPath = getCStringOrDefault(configData, "LongIRQMetricsPath");
+    std::string stormIRQMetricsPath = getCStringOrDefault(configData, "StormIRQMetricsPath");
+    std::string IRQStatsResetPath = getCStringOrDefault(configData, "IRQStatsResetPath");
     if (uart_enabled == "running") {
         return;
     }
     std::string irq_file_contents, storm_file_contents;
-    if (kLongIRQMetricsPath == nullptr || strlen(kLongIRQMetricsPath) == 0) {
-        ALOGV("LongIRQ path not specified");
+    if (longIRQMetricsPath.empty()) {
+        ALOGV("LongIRQ path not specified in JSON");
         return;
     }
-    if (!ReadFileToString(kLongIRQMetricsPath, &irq_file_contents)) {
-        ALOGE("Unable to read LongIRQ %s - %s", kLongIRQMetricsPath, strerror(errno));
+    if (!ReadFileToString(longIRQMetricsPath.c_str(), &irq_file_contents)) {
+        ALOGE("Unable to read LongIRQ %s - %s", longIRQMetricsPath.c_str(), strerror(errno));
         return;
     }
-    if (kStormIRQMetricsPath == nullptr || strlen(kStormIRQMetricsPath) == 0) {
-        ALOGV("StormIRQ path not specified");
+    if (stormIRQMetricsPath.empty()) {
+        ALOGV("StormIRQ path not specified in JSON");
         return;
     }
-    if (!ReadFileToString(kStormIRQMetricsPath, &storm_file_contents)) {
-        ALOGE("Unable to read StormIRQ %s - %s", kStormIRQMetricsPath, strerror(errno));
+    if (!ReadFileToString(stormIRQMetricsPath.c_str(), &storm_file_contents)) {
+        ALOGE("Unable to read StormIRQ %s - %s", stormIRQMetricsPath.c_str(), strerror(errno));
         return;
     }
-    if (kIRQStatsResetPath == nullptr || strlen(kIRQStatsResetPath) == 0) {
-        ALOGV("IRQStatsReset path not specified");
+    if (IRQStatsResetPath.empty()) {
+        ALOGV("IRQStatsReset path not specified in JSON");
         return;
     }
     int offset = 0;
@@ -2037,7 +2070,7 @@ void SysfsCollector::logVendorLongIRQStatsReported(const std::shared_ptr<IStats>
         ALOGE("Unable to report kVendorLongIRQStatsReported to Stats service");
 
     // Reset irq stats
-    if (!WriteStringToFile(std::to_string(1), kIRQStatsResetPath)) {
+    if (!WriteStringToFile(std::to_string(1), IRQStatsResetPath)) {
         ALOGE("Failed to write to stats_reset");
         return;
     }
@@ -2081,6 +2114,8 @@ void SysfsCollector::logPcieLinkStats(const std::shared_ptr<IStats> &stats_clien
         int modem_msg_field_number;
         int wifi_msg_field_number;
     };
+    std::string modemPcieLinkStatsPath = getCStringOrDefault(configData, "ModemPcieLinkStatsPath");
+    std::string wifiPcieLinkStatsPath = getCStringOrDefault(configData, "WifiPcieLinkStatsPath");
 
     int i;
     bool reportPcieLinkStats = false;
@@ -2113,12 +2148,12 @@ void SysfsCollector::logPcieLinkStats(const std::shared_ptr<IStats> &stats_clien
     };
 
 
-    if (kModemPcieLinkStatsPath == nullptr) {
-        ALOGD("Modem PCIe stats path not specified");
+    if (modemPcieLinkStatsPath.empty()) {
+        ALOGV("Modem PCIe stats path not specified in JSON");
     } else {
         for (i=0; i < ARRAY_SIZE(datamap); i++) {
             std::string modempath =
-                    std::string(kModemPcieLinkStatsPath) + "/" + datamap[i].sysfs_path;
+                    std::string(modemPcieLinkStatsPath) + "/" + datamap[i].sysfs_path;
 
             if (ReadFileToInt(modempath, &(datamap[i].modem_val))) {
                 reportPcieLinkStats = true;
@@ -2136,12 +2171,12 @@ void SysfsCollector::logPcieLinkStats(const std::shared_ptr<IStats> &stats_clien
         }
     }
 
-    if (kWifiPcieLinkStatsPath == nullptr) {
-        ALOGD("Wifi PCIe stats path not specified");
+    if (wifiPcieLinkStatsPath.empty()) {
+        ALOGV("Wifi PCIe stats path not specified in JSON");
     } else {
         for (i=0; i < ARRAY_SIZE(datamap); i++) {
             std::string wifipath =
-                    std::string(kWifiPcieLinkStatsPath) + "/" + datamap[i].sysfs_path;
+                    std::string(wifiPcieLinkStatsPath) + "/" + datamap[i].sysfs_path;
 
             if (ReadFileToInt(wifipath, &(datamap[i].wifi_val))) {
                 reportPcieLinkStats = true;
@@ -2193,11 +2228,13 @@ void SysfsCollector::logPcieLinkStats(const std::shared_ptr<IStats> &stats_clien
  * Read the contents of kPowerMitigationDurationPath and report them.
  */
 void SysfsCollector::logMitigationDurationCounts(const std::shared_ptr<IStats> &stats_client) {
-    if (kPowerMitigationDurationPath == nullptr || strlen(kPowerMitigationDurationPath) == 0) {
-        ALOGE("Mitigation Duration path is invalid!");
+    std::string powerMitigationDurationPath = getCStringOrDefault(configData, "PowerMitigationDurationPath");
+
+    if (powerMitigationDurationPath.empty()) {
+        ALOGV("Mitigation Duration path not specified in JSON");
         return;
     }
-    mitigation_duration_reporter_.logMitigationDuration(stats_client, kPowerMitigationDurationPath);
+    mitigation_duration_reporter_.logMitigationDuration(stats_client, powerMitigationDurationPath);
 }
 
 void SysfsCollector::logPerDay() {
@@ -2265,12 +2302,15 @@ void SysfsCollector::logBrownout() {
         ALOGE("Unable to get AIDL Stats service");
         return;
     }
-    if (kBrownoutCsvPath != nullptr && strlen(kBrownoutCsvPath) > 0)
-        brownout_detected_reporter_.logBrownoutCsv(stats_client, kBrownoutCsvPath,
-                                                   kBrownoutReasonProp);
-    else if (kBrownoutLogPath != nullptr && strlen(kBrownoutLogPath) > 0)
-        brownout_detected_reporter_.logBrownout(stats_client, kBrownoutLogPath,
-                                                kBrownoutReasonProp);
+    std::string brownoutCsvPath = getCStringOrDefault(configData, "BrownoutCsvPath");
+    std::string brownoutLogPath = getCStringOrDefault(configData, "BrownoutLogPath");
+    std::string brownoutReasonProp = getCStringOrDefault(configData, "BrownoutReasonProp");
+    if (brownoutCsvPath.empty())
+        brownout_detected_reporter_.logBrownoutCsv(stats_client, brownoutCsvPath.c_str(),
+                                                   brownoutReasonProp);
+    else if (brownoutLogPath.empty())
+        brownout_detected_reporter_.logBrownout(stats_client, brownoutLogPath.c_str(),
+                                                brownoutReasonProp);
 }
 
 void SysfsCollector::logWater() {
@@ -2279,11 +2319,9 @@ void SysfsCollector::logWater() {
         ALOGE("Unable to get AIDL Stats service");
         return;
     }
-    if (kWaterEventPath == nullptr || strlen(kWaterEventPath) == 0)
-        return;
-    PixelAtoms::WaterEventReported::EventPoint event_point =
-            PixelAtoms::WaterEventReported::EventPoint::WaterEventReported_EventPoint_BOOT;
-    water_event_reporter_.logEvent(stats_client, event_point, kWaterEventPath);
+    std::vector<std::string> waterEventPaths =
+        readStringVectorFromJson(configData["WaterEventPaths"]);
+    water_event_reporter_.logBootEvent(stats_client, waterEventPaths);
 }
 
 void SysfsCollector::logOnce() {
@@ -2297,13 +2335,14 @@ void SysfsCollector::logPerHour() {
         ALOGE("Unable to get AIDL Stats service");
         return;
     }
+    std::string powerMitigationStatsPath = getCStringOrDefault(configData, "PowerMitigationStatsPath");
     mm_metrics_reporter_.logPixelMmMetricsPerHour(stats_client);
     mm_metrics_reporter_.logGcmaPerHour(stats_client);
     mm_metrics_reporter_.logMmProcessUsageByOomGroupSnapshot(stats_client);
     logZramStats(stats_client);
-    if (kPowerMitigationStatsPath != nullptr && strlen(kPowerMitigationStatsPath) > 0)
+    if (powerMitigationStatsPath.empty())
         mitigation_stats_reporter_.logMitigationStatsPerHour(stats_client,
-                                                             kPowerMitigationStatsPath);
+                                                             powerMitigationStatsPath.c_str());
 }
 
 /**

@@ -34,7 +34,7 @@ class PixelJSONFieldNameChecker(object):
     Typical usage example:
 
     foo = PixelFieldNameChecker(files, vocabulary_path)
-    success, error = foo.check_json_spelling()
+    success, error = foo.check_json_field_names()
   """
   valid_field_names = None
   json_files = None

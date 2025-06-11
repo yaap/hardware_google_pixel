@@ -23,11 +23,11 @@
 #include <mutex>
 #include <optional>
 
-#include "AdpfTypes.h"
 #include "AppHintDesc.h"
 #include "BackgroundWorker.h"
 #include "GpuCapacityNode.h"
 #include "SessionTaskMap.h"
+#include "TaskRampupMultNode.h"
 
 namespace aidl {
 namespace google {
@@ -37,8 +37,6 @@ namespace impl {
 namespace pixel {
 
 using ::android::Thread;
-
-constexpr char kPowerHalAdpfDisableTopAppBoost[] = "vendor.powerhal.adpf.disable.hint";
 
 template <class HintManagerT = ::android::perfmgr::HintManager>
 class PowerSessionManager : public Immobile {
@@ -51,16 +49,14 @@ class PowerSessionManager : public Immobile {
     void addPowerSession(const std::string &idString,
                          const std::shared_ptr<AppHintDesc> &sessionDescriptor,
                          const std::shared_ptr<AppDescriptorTrace> &sessionTrace,
-                         const std::vector<int32_t> &threadIds, const ProcessTag procTag);
-    void removePowerSession(int64_t sessionId, const ProcessTag procTag);
+                         const std::vector<int32_t> &threadIds);
+    void removePowerSession(int64_t sessionId);
     // Replace current threads in session with threadIds
-    void setThreadsFromPowerSession(int64_t sessionId, const std::vector<int32_t> &threadIds,
-                                    const ProcessTag procTag);
+    void setThreadsFromPowerSession(int64_t sessionId, const std::vector<int32_t> &threadIds);
     // Pause and resume power hint session
     void pause(int64_t sessionId);
     void resume(int64_t sessionId);
 
-    void updateUniversalBoostMode();
     void dumpToFd(int fd);
 
     void updateTargetWorkDuration(int64_t sessionId, AdpfVoteType voteId,
@@ -80,8 +76,10 @@ class PowerSessionManager : public Immobile {
 
     void updateHboostStatistics(int64_t sessionId, SessionJankyLevel jankyLevel,
                                 int32_t numOfFrames);
-
     void updateFrameBuckets(int64_t sessionId, const FrameBuckets &lastReportedFrames);
+    bool hasValidTaskRampupMultNode();
+    void updateRampupBoostMode(int64_t sessionId, SessionJankyLevel jankyLevel,
+                               int32_t defaultRampupVal, int32_t highRampupVal);
 
     // Singleton
     static PowerSessionManager *getInstance() {
@@ -100,8 +98,6 @@ class PowerSessionManager : public Immobile {
 
   private:
     std::optional<bool> isAnyAppSessionActive();
-    void disableSystemTopAppBoost();
-    void enableSystemTopAppBoost();
     const std::string kDisableBoostHintName;
 
     // Rewrite specific
@@ -128,14 +124,16 @@ class PowerSessionManager : public Immobile {
     void applyCpuAndGpuVotes(int64_t sessionId, std::chrono::steady_clock::time_point timePoint);
     // Force a session active or in-active, helper for other methods
     void forceSessionActive(int64_t sessionId, bool isActive);
+    std::string getSessionTaskProfile(int64_t sessionId, bool isSetProfile) const;
+    void voteRampupBoostLocked(int64_t sessionId, bool rampupBoostVote, int32_t defaultRampupVal,
+                               int32_t highRampupVal);
 
     // Singleton
     PowerSessionManager()
-        : kDisableBoostHintName(::android::base::GetProperty(kPowerHalAdpfDisableTopAppBoost,
-                                                             "ADPF_DISABLE_TA_BOOST")),
-          mPriorityQueueWorkerPool(new PriorityQueueWorkerPool(1, "adpf_handler")),
+        : mPriorityQueueWorkerPool(new PriorityQueueWorkerPool(1, "adpf_handler")),
           mEventSessionTimeoutWorker([&](auto e) { handleEvent(e); }, mPriorityQueueWorkerPool),
-          mGpuCapacityNode(createGpuCapacityNode()) {}
+          mGpuCapacityNode(createGpuCapacityNode()),
+          mTaskRampupMultNode(TaskRampupMultNode::getInstance()) {}
     PowerSessionManager(PowerSessionManager const &) = delete;
     PowerSessionManager &operator=(PowerSessionManager const &) = delete;
 
@@ -145,6 +143,7 @@ class PowerSessionManager : public Immobile {
     std::unordered_map<int, std::weak_ptr<void>> mSessionMap GUARDED_BY(mSessionMapMutex);
 
     std::atomic<bool> mGameModeEnabled{false};
+    std::shared_ptr<TaskRampupMultNode> mTaskRampupMultNode;
 };
 
 }  // namespace pixel

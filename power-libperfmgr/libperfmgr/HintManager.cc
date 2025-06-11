@@ -104,6 +104,9 @@ void HintManager::DoHintStatus(const std::string &hint_type, std::chrono::millis
     ATRACE_INT(("H:" + hint_type).c_str(), (timeout_ms == kMilliSecondZero)
                                                    ? std::numeric_limits<int>::max()
                                                    : timeout_ms.count());
+    ATRACE_NAME(("H:" + hint_type + ":" + std::to_string((timeout_ms == kMilliSecondZero)
+                                                   ? std::numeric_limits<int>::max()
+                                                   : timeout_ms.count())).c_str());
     if (now > actions_.at(hint_type).status->end_time) {
         actions_.at(hint_type).status->stats.duration_ms.fetch_add(
                 std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -121,6 +124,7 @@ void HintManager::EndHintStatus(const std::string &hint_type) {
     // Update HintStats if the hint ends earlier than expected end_time
     auto now = std::chrono::steady_clock::now();
     ATRACE_INT(("H:" + hint_type).c_str(), 0);
+    ATRACE_NAME(("H:" + hint_type + ":0").c_str());
     if (now < actions_.at(hint_type).status->end_time) {
         actions_.at(hint_type).status->stats.duration_ms.fetch_add(
                 std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -804,6 +808,9 @@ std::vector<std::shared_ptr<AdpfConfig>> HintManager::ParseAdpfConfigs(
         std::optional<double> jankCheckTimeFactor;
         std::optional<uint32_t> lowFrameRateThreshold;
         std::optional<uint32_t> maxRecordsNum;
+        std::optional<bool> heuristicRampup;
+        std::optional<uint32_t> defaultRampupMult;
+        std::optional<uint32_t> highRampupMult;
 
         std::optional<uint32_t> uclampMinLoadUp;
         std::optional<uint32_t> uclampMinLoadReset;
@@ -839,6 +846,9 @@ std::vector<std::shared_ptr<AdpfConfig>> HintManager::ParseAdpfConfigs(
         ADPF_PARSE_OPTIONAL(jankCheckTimeFactor, "JankCheckTimeFactor", Double);
         ADPF_PARSE_OPTIONAL(lowFrameRateThreshold, "LowFrameRateThreshold", UInt);
         ADPF_PARSE_OPTIONAL(maxRecordsNum, "MaxRecordsNum", UInt);
+        ADPF_PARSE_OPTIONAL(heuristicRampup, "HeuristicRampup", Bool);
+        ADPF_PARSE_OPTIONAL(defaultRampupMult, "DefaultRampupMult", UInt);
+        ADPF_PARSE_OPTIONAL(highRampupMult, "HighRampupMult", UInt);
         ADPF_PARSE_OPTIONAL(uclampMaxEfficientBase, "UclampMax_EfficientBase", Int);
         ADPF_PARSE_OPTIONAL(uclampMaxEfficientOffset, "UclampMax_EfficientOffset", Int);
 
@@ -882,6 +892,14 @@ std::vector<std::shared_ptr<AdpfConfig>> HintManager::ParseAdpfConfigs(
                 adpfs_parsed.clear();
                 return adpfs_parsed;
             }
+
+            // check heuristic rampup configurations.
+            if (heuristicRampup.has_value() &&
+                (!defaultRampupMult.has_value() || !highRampupMult.has_value())) {
+                LOG(ERROR) << "Part of the heuristic rampup configurations are missing!";
+                adpfs_parsed.clear();
+                return adpfs_parsed;
+            }
         }
 
         if (uclampMaxEfficientBase.has_value() != uclampMaxEfficientBase.has_value()) {
@@ -905,8 +923,9 @@ std::vector<std::shared_ptr<AdpfConfig>> HintManager::ParseAdpfConfigs(
                 gpuCapacityLoadUpHeadroom, heuristicBoostOn, hBoostModerateJankThreshold,
                 hBoostOffMaxAvgDurRatio, hBoostSevereJankPidPu, hBoostSevereJankThreshold,
                 hBoostUclampMinCeilingRange, hBoostUclampMinFloorRange, jankCheckTimeFactor,
-                lowFrameRateThreshold, maxRecordsNum, uclampMinLoadUp.value(),
-                uclampMinLoadReset.value(), uclampMaxEfficientBase, uclampMaxEfficientOffset));
+                lowFrameRateThreshold, maxRecordsNum, heuristicRampup, defaultRampupMult,
+                highRampupMult, uclampMinLoadUp.value(), uclampMinLoadReset.value(),
+                uclampMaxEfficientBase, uclampMaxEfficientOffset));
     }
     LOG(INFO) << adpfs_parsed.size() << " AdpfConfigs parsed successfully";
     return adpfs_parsed;

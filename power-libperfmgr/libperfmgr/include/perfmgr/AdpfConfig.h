@@ -64,6 +64,11 @@ struct AdpfConfig {
     std::optional<uint32_t> mLowFrameRateThreshold;
     std::optional<uint32_t> mMaxRecordsNum;
 
+    // Rampup boost control
+    std::optional<bool> mHeuristicRampup;
+    std::optional<uint32_t> mDefaultRampupMult;
+    std::optional<uint32_t> mHighRampupMult;
+
     uint32_t mUclampMinLoadUp;
     uint32_t mUclampMinLoadReset;
 
@@ -92,8 +97,9 @@ struct AdpfConfig {
                std::optional<std::pair<uint32_t, uint32_t>> hBoostUclampMinFloorRange,
                std::optional<double> jankCheckTimeFactor,
                std::optional<uint32_t> lowFrameRateThreshold, std::optional<uint32_t> maxRecordsNum,
-               uint32_t uclampMinLoadUp, uint32_t uclampMinLoadReset,
-               std::optional<int32_t> uclampMaxEfficientBase,
+               std::optional<bool> heuristicRampup, std::optional<uint32_t> defaultRampupMult,
+               std::optional<uint32_t> highRampupMult, uint32_t uclampMinLoadUp,
+               uint32_t uclampMinLoadReset, std::optional<int32_t> uclampMaxEfficientBase,
                std::optional<int32_t> uclampMaxEfficientOffset)
         : mName(std::move(name)),
           mPidOn(pidOn),
@@ -128,6 +134,9 @@ struct AdpfConfig {
           mJankCheckTimeFactor(jankCheckTimeFactor),
           mLowFrameRateThreshold(lowFrameRateThreshold),
           mMaxRecordsNum(maxRecordsNum),
+          mHeuristicRampup(heuristicRampup),
+          mDefaultRampupMult(defaultRampupMult),
+          mHighRampupMult(highRampupMult),
           mUclampMinLoadUp(uclampMinLoadUp),
           mUclampMinLoadReset(uclampMinLoadReset),
           mUclampMaxEfficientBase(uclampMaxEfficientBase),

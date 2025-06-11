@@ -223,7 +223,10 @@ constexpr char kJSON_ADPF[] = R"(
             "HBoostUclampMinFloorRange": [200, 400],
             "JankCheckTimeFactor": 1.2,
             "LowFrameRateThreshold": 25,
-            "MaxRecordsNum": 50
+            "MaxRecordsNum": 50,
+            "HeuristicRampup": true,
+            "DefaultRampupMult": 1,
+            "HighRampupMult": 4
         },
         {
             "Name": "ADPF_SF",
@@ -273,7 +276,17 @@ constexpr char kJSON_ADPF[] = R"(
             "TargetTimeFactor": 1.4,
             "StaleTimeFactor": 5.0,
             "GpuBoost": false,
-            "GpuCapacityBoostMax": 32500
+            "GpuCapacityBoostMax": 32500,
+            "HeuristicBoost_On": true,
+            "HBoostModerateJankThreshold": 4,
+            "HBoostOffMaxAvgDurRatio": 4.0,
+            "HBoostSevereJankPidPu": 0.5,
+            "HBoostSevereJankThreshold": 2,
+            "HBoostUclampMinCeilingRange": [480, 800],
+            "HBoostUclampMinFloorRange": [200, 400],
+            "JankCheckTimeFactor": 1.2,
+            "LowFrameRateThreshold": 25,
+            "MaxRecordsNum": 50
         }
     ],
     "GpuSysfsPath" : "/sys/devices/platform/123.abc"
@@ -907,6 +920,12 @@ TEST_F(HintManagerTest, ParseAdpfConfigsTest) {
     EXPECT_FALSE(adpfs[1]->mLowFrameRateThreshold.has_value());
     EXPECT_EQ(50U, adpfs[0]->mMaxRecordsNum.value());
     EXPECT_FALSE(adpfs[1]->mMaxRecordsNum.has_value());
+    EXPECT_TRUE(adpfs[0]->mHeuristicRampup.value());
+    EXPECT_FALSE(adpfs[1]->mHeuristicRampup.has_value());
+    EXPECT_EQ(1U, adpfs[0]->mDefaultRampupMult.value());
+    EXPECT_FALSE(adpfs[1]->mDefaultRampupMult.has_value());
+    EXPECT_EQ(4U, adpfs[0]->mHighRampupMult.value());
+    EXPECT_FALSE(adpfs[1]->mHighRampupMult.has_value());
 }
 
 // Test parsing adpf configs with duplicate name
@@ -933,6 +952,16 @@ TEST_F(HintManagerTest, ParseAdpfConfigsWithoutPIDPoTest) {
 TEST_F(HintManagerTest, ParseAdpfConfigsWithBrokenHBoostConfig) {
     std::string json_doc = std::string(kJSON_ADPF);
     std::string from = "\"JankCheckTimeFactor\": 1.2";
+    size_t start_pos = json_doc.find(from);
+    json_doc.replace(start_pos, from.length(), "");
+    std::vector<std::shared_ptr<AdpfConfig>> adpfs = HintManager::ParseAdpfConfigs(json_doc);
+    EXPECT_EQ(0u, adpfs.size());
+}
+
+// Test parsing adpf configs with partially missing heuristic rampup config
+TEST_F(HintManagerTest, ParseAdpfConfigsWithBrokenRampupBoostConfig) {
+    std::string json_doc = std::string(kJSON_ADPF);
+    std::string from = "\"DefaultRampupMult\": 1";
     size_t start_pos = json_doc.find(from);
     json_doc.replace(start_pos, from.length(), "");
     std::vector<std::shared_ptr<AdpfConfig>> adpfs = HintManager::ParseAdpfConfigs(json_doc);
