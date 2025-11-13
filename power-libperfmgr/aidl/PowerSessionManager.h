@@ -26,6 +26,7 @@
 #include "AppHintDesc.h"
 #include "BackgroundWorker.h"
 #include "GpuCapacityNode.h"
+#include "SessionMetrics.h"
 #include "SessionTaskMap.h"
 #include "TaskRampupMultNode.h"
 
@@ -49,7 +50,7 @@ class PowerSessionManager : public Immobile {
     void addPowerSession(const std::string &idString,
                          const std::shared_ptr<AppHintDesc> &sessionDescriptor,
                          const std::shared_ptr<AppDescriptorTrace> &sessionTrace,
-                         const std::vector<int32_t> &threadIds);
+                         const bool enableMetricCollection, const std::vector<int32_t> &threadIds);
     void removePowerSession(int64_t sessionId);
     // Replace current threads in session with threadIds
     void setThreadsFromPowerSession(int64_t sessionId, const std::vector<int32_t> &threadIds);
@@ -76,7 +77,7 @@ class PowerSessionManager : public Immobile {
 
     void updateHboostStatistics(int64_t sessionId, SessionJankyLevel jankyLevel,
                                 int32_t numOfFrames);
-    void updateFrameBuckets(int64_t sessionId, const FrameBuckets &lastReportedFrames);
+    void updateFrameMetrics(int64_t sessionId, const FrameTimingMetrics &lastReportedFrames);
     bool hasValidTaskRampupMultNode();
     void updateRampupBoostMode(int64_t sessionId, SessionJankyLevel jankyLevel,
                                int32_t defaultRampupVal, int32_t highRampupVal);
@@ -95,9 +96,11 @@ class PowerSessionManager : public Immobile {
     void clear();
     std::shared_ptr<void> getSession(int64_t sessionId);
     bool getGameModeEnableState();
+    bool updateCollectedSessionMetrics(int64_t sessionId);
+    bool areAllSessionsTimeout();
 
   private:
-    std::optional<bool> isAnyAppSessionActive();
+    bool isAnyAppSessionActive();
     const std::string kDisableBoostHintName;
 
     // Rewrite specific
@@ -133,7 +136,10 @@ class PowerSessionManager : public Immobile {
         : mPriorityQueueWorkerPool(new PriorityQueueWorkerPool(1, "adpf_handler")),
           mEventSessionTimeoutWorker([&](auto e) { handleEvent(e); }, mPriorityQueueWorkerPool),
           mGpuCapacityNode(createGpuCapacityNode()),
-          mTaskRampupMultNode(TaskRampupMultNode::getInstance()) {}
+          mTaskRampupMultNode(TaskRampupMultNode::getInstance()),
+          kMaxNumOfCachedSessionMetrics(HintManagerT::GetInstance()
+                                                ->GetOtherConfigs()
+                                                .maxNumOfCachedSessionMetrics.value_or(100)) {}
     PowerSessionManager(PowerSessionManager const &) = delete;
     PowerSessionManager &operator=(PowerSessionManager const &) = delete;
 
@@ -144,6 +150,9 @@ class PowerSessionManager : public Immobile {
 
     std::atomic<bool> mGameModeEnabled{false};
     std::shared_ptr<TaskRampupMultNode> mTaskRampupMultNode;
+
+    std::vector<SessionMetrics> mCollectedSessionMetrics GUARDED_BY(mSessionTaskMapMutex);
+    const int32_t kMaxNumOfCachedSessionMetrics;
 };
 
 }  // namespace pixel

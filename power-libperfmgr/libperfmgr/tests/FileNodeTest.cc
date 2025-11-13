@@ -17,8 +17,8 @@
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
-#include <algorithm>
 #include <thread>
 
 #include "perfmgr/FileNode.h"
@@ -41,7 +41,7 @@ static inline void _VerifyPathValue(const std::string& path,
 // Test init with no default value
 TEST(FileNodeTest, NoInitDefaultTest) {
     TemporaryFile tf;
-    FileNode t("t", tf.path, {{"value0"}, {"value1"}, {"value2"}}, 1, false, false);
+    FileNode t("t", {tf.path}, {{"value0"}, {"value1"}, {"value2"}}, 1, false, false, false);
     t.Update(false);
     _VerifyPathValue(tf.path, "");
 }
@@ -49,11 +49,11 @@ TEST(FileNodeTest, NoInitDefaultTest) {
 // Test init with default value
 TEST(FileNodeTest, InitDefaultTest) {
     TemporaryFile tf;
-    FileNode t("t", tf.path, {{"value0"}, {"value1"}, {"value2"}}, 1, true, true);
+    FileNode t("t", {tf.path}, {{"value0"}, {"value1"}, {"value2"}}, 1, true, true, false);
     t.Update(false);
     _VerifyPathValue(tf.path, "value1");
     TemporaryFile tf2;
-    FileNode t2("t2", tf2.path, {{"value0"}, {"value1"}, {"value2"}}, 0, true, true);
+    FileNode t2("t2", {tf2.path}, {{"value0"}, {"value1"}, {"value2"}}, 0, true, true, false);
     t2.Update(false);
     _VerifyPathValue(tf2.path, "value0");
 }
@@ -61,8 +61,8 @@ TEST(FileNodeTest, InitDefaultTest) {
 // Test DumpToFd
 TEST(FileNodeTest, DumpToFdTest) {
     TemporaryFile tf;
-    FileNode t("test_dump", tf.path, {{"value0"}, {"value1"}, {"value2"}}, 1,
-               true, true);
+    FileNode t("test_dump", {tf.path}, {{"value0"}, {"value1"}, {"value2"}}, 1,
+               true, true, false);
     t.Update(false);
     TemporaryFile dumptf;
     t.DumpToFd(dumptf.fd);
@@ -82,7 +82,7 @@ TEST(FileNodeTest, DumpToFdTest) {
 // Test GetValueIndex
 TEST(FileNodeTest, GetValueIndexTest) {
     TemporaryFile tf;
-    FileNode t("t", tf.path, {{"value0"}, {"value1"}, {"value2"}}, 1, false, false);
+    FileNode t("t", {tf.path}, {{"value0"}, {"value1"}, {"value2"}}, 1, false, false, false);
     std::size_t index = 0;
     EXPECT_TRUE(t.GetValueIndex("value2", &index));
     EXPECT_EQ(2u, index);
@@ -94,21 +94,19 @@ TEST(FileNodeTest, GetValueIndexTest) {
 // Test GetValues
 TEST(FileNodeTest, GetValuesTest) {
     TemporaryFile tf;
-    FileNode t("t", tf.path, {{"value0"}, {"value1"}, {"value2"}}, 1, false, false);
+    FileNode t("t", {tf.path}, {{"value0"}, {"value1"}, {"value2"}}, 1, false, false, false);
     std::vector values = t.GetValues();
     EXPECT_EQ(3u, values.size());
-    EXPECT_EQ("value0", values[0]);
-    EXPECT_EQ("value1", values[1]);
-    EXPECT_EQ("value2", values[2]);
+    EXPECT_THAT(values, testing::ElementsAre("value0", "value1", "value2"));
 }
 
 // Test get more properties
 TEST(FileNodeTest, GetPropertiesTest) {
     std::string test_name = "TESTREQ_1";
     std::string test_path = "TEST_PATH";
-    FileNode t(test_name, test_path, {}, 0, false, false, true);
+    FileNode t(test_name, {test_path}, {}, 0, false, true, false, true);
     EXPECT_EQ(test_name, t.GetName());
-    EXPECT_EQ(test_path, t.GetPath());
+    EXPECT_THAT(t.GetPaths(), testing::ElementsAre(test_path));
     EXPECT_EQ(0u, t.GetValues().size());
     EXPECT_EQ(0u, t.GetDefaultIndex());
     EXPECT_FALSE(t.GetResetOnInit());
@@ -117,8 +115,8 @@ TEST(FileNodeTest, GetPropertiesTest) {
 
 // Test add request fail and retry
 TEST(FileNodeTest, AddRequestTestFail) {
-    FileNode t("t", "/sys/android/nonexist_node_test",
-               {{"value0"}, {"value1"}, {"value2"}}, 2, true, true);
+    FileNode t("t", {"/sys/android/nonexist_node_test"},
+               {{"value0"}, {"value1"}, {"value2"}}, 2, true, true, false);
     auto start = std::chrono::steady_clock::now();
     EXPECT_TRUE(t.AddRequest(1, "INTERACTION", start + 200ms));
     std::chrono::milliseconds expire_time = t.Update(true);
@@ -136,7 +134,7 @@ TEST(FileNodeTest, AddRequestTestFail) {
 // Test add request
 TEST(FileNodeTest, AddRequestTest) {
     TemporaryFile tf;
-    FileNode t("t", tf.path, {{"value0"}, {"value1"}, {"value2"}}, 2, true, true);
+    FileNode t("t", {tf.path}, {{"value0"}, {"value1"}, {"value2"}}, 2, true, true, false);
     auto start = std::chrono::steady_clock::now();
     EXPECT_TRUE(t.AddRequest(1, "INTERACTION", start + 500ms));
     std::chrono::milliseconds expire_time = t.Update(true);
@@ -166,7 +164,7 @@ TEST(FileNodeTest, AddRequestTest) {
 // Test remove request
 TEST(FileNodeTest, RemoveRequestTest) {
     TemporaryFile tf;
-    FileNode t("t", tf.path, {{"value0"}, {"value1"}, {"value2"}}, 2, true, true);
+    FileNode t("t", {tf.path}, {{"value0"}, {"value1"}, {"value2"}}, 2, true, false, true);
     auto start = std::chrono::steady_clock::now();
     EXPECT_TRUE(t.AddRequest(1, "INTERACTION", start + 500ms));
     std::chrono::milliseconds expire_time = t.Update(true);
@@ -196,8 +194,8 @@ TEST(FileNodeTest, RemoveRequestTest) {
 // Test add request with holding fd
 TEST(FileNodeTest, AddRequestTestHoldFdOverride) {
     TemporaryFile tf;
-    FileNode t("t", tf.path, {{"value0"}, {"value1"}, {"value2"}}, 2, true,
-               true, true);
+    FileNode t("t", {tf.path}, {{"value0"}, {"value1"}, {"value2"}}, 2, true,
+               true, false, true, true);
     EXPECT_TRUE(t.GetHoldFd());
     auto start = std::chrono::steady_clock::now();
     EXPECT_TRUE(t.AddRequest(1, "INTERACTION", start + 500ms));
@@ -235,6 +233,23 @@ TEST(FileNodeTest, AddRequestTestHoldFdOverride) {
     expire_time = t.Update(true);
     _VerifyPathValue(tf.path, "value2");
     EXPECT_EQ(std::chrono::milliseconds::max(), expire_time);
+}
+
+TEST(FileNodeTest, AllowFailureTest) {
+    FileNode t("t", {"/sys/android/nonexist_node_test"},
+               {{"value0"}, {"value1"}, {"value2"}}, 2, true, true, true);
+    auto start = std::chrono::steady_clock::now();
+    EXPECT_TRUE(t.AddRequest(1, "INTERACTION", start + 200ms));
+    std::chrono::milliseconds expire_time = t.Update(true);
+    // Add request @ value1
+    EXPECT_NEAR(std::chrono::milliseconds(200).count(), expire_time.count(),
+                kTIMING_TOLERANCE_MS);
+    // Add request @ value0 higher prio than value1
+    EXPECT_TRUE(t.AddRequest(0, "LAUNCH", start + 2000ms));
+    expire_time = t.Update(true);
+    // Retry in 2000 ms
+    EXPECT_NEAR(std::chrono::milliseconds(2000).count(), expire_time.count(),
+                kTIMING_TOLERANCE_MS);
 }
 
 }  // namespace perfmgr

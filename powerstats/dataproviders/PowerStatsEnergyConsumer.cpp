@@ -81,7 +81,7 @@ bool PowerStatsEnergyConsumer::addEnergyMeter(std::set<std::string> channelNames
 
     for (const auto &c : channels) {
         if (channelNames.count(c.name)) {
-            mChannelIds.push_back(c.id);
+            mChannelIds.insert(c.id);
         }
     }
 
@@ -144,18 +144,21 @@ bool PowerStatsEnergyConsumer::addAttribution(std::unordered_map<int32_t, std::s
     return (mCoefficients.size() == stateCoeffs.size());
 }
 
-std::optional<EnergyConsumerResult> PowerStatsEnergyConsumer::getEnergyConsumed() {
+std::optional<EnergyConsumerResult> PowerStatsEnergyConsumer::getEnergyConsumed(
+        const std::vector<EnergyMeasurement> &energyData) {
     int64_t totalEnergyUWs = 0;
     int64_t timestampMs = 0;
 
     if (!mChannelIds.empty()) {
-        std::vector<EnergyMeasurement> measurements;
-        if (mPowerStats->readEnergyMeter(mChannelIds, &measurements).isOk()) {
-            for (const auto &m : measurements) {
-                totalEnergyUWs += m.energyUWs;
-                timestampMs = m.timestampMs;
+        int found = 0;
+        for (const auto &e : energyData) {
+            if (mChannelIds.count(e.id)) {
+                totalEnergyUWs += e.energyUWs;
+                timestampMs = e.timestampMs;
+                found++;
             }
-        } else {
+        }
+        if (found != mChannelIds.size()) {
             LOG(ERROR) << "Failed to read energy meter";
             return {};
         }

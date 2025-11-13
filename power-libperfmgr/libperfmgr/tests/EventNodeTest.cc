@@ -17,10 +17,11 @@
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
-#include <algorithm>
 #include <thread>
 
+#include "gmock/gmock.h"
 #include "perfmgr/EventNode.h"
 
 namespace android {
@@ -34,9 +35,9 @@ constexpr auto kSLEEP_TOLERANCE_MS = 2ms;
 // Test init with no default value
 TEST(EventNodeTest, NoInitDefaultTest) {
     std::string node_val = "uninitialize";
-    auto update_callback = [&node_val](const std::string &, const std::string &,
+    auto update_callback = [&node_val](const std::string &, const std::vector<std::string> &,
                                        const std::string &val) { node_val = val; };
-    EventNode t("EventName", "<Event>:Node", {{"value0"}, {"value1"}, {"value2"}}, 1, false,
+    EventNode t("EventName", {"<Event>:Node"}, {{"value0"}, {"value1"}, {"value2"}}, 1, false,
                 update_callback);
     t.Update(false);
     EXPECT_EQ(node_val, "uninitialize");
@@ -45,13 +46,13 @@ TEST(EventNodeTest, NoInitDefaultTest) {
 // Test init with default value
 TEST(EventNodeTest, InitDefaultTest) {
     std::string node_val = "uninitialize";
-    auto update_callback = [&node_val](const std::string &, const std::string &,
+    auto update_callback = [&node_val](const std::string &, const std::vector<std::string> &,
                                        const std::string &val) { node_val = val; };
-    EventNode t("EventName", "<Event>:Node", {{"value0"}, {"value1"}, {"value2"}}, 1, true,
+    EventNode t("EventName", {"<Event>:Node"}, {{"value0"}, {"value1"}, {"value2"}}, 1, true,
                 update_callback);
     t.Update(false);
     EXPECT_EQ(node_val, "value1");
-    EventNode t2("EventName", "<Event>:Node", {{"value0"}, {"value1"}, {"value2"}}, 0, true,
+    EventNode t2("EventName", {"<Event>:Node"}, {{"value0"}, {"value1"}, {"value2"}}, 0, true,
                  update_callback);
     t2.Update(false);
     EXPECT_EQ(node_val, "value0");
@@ -60,9 +61,9 @@ TEST(EventNodeTest, InitDefaultTest) {
 // Test DumpToFd
 TEST(EventNodeTest, DumpToFdTest) {
     std::string node_val = "uninitialize";
-    auto update_callback = [&node_val](const std::string &, const std::string &,
+    auto update_callback = [&node_val](const std::string &, const std::vector<std::string> &,
                                        const std::string &val) { node_val = val; };
-    EventNode t("EventName", "<Event>:Node", {{"value0"}, {"value1"}, {"value2"}}, 1, true,
+    EventNode t("EventName", {"<Event>:Node"}, {{"value0"}, {"value1"}, {"value2"}}, 1, true,
                 update_callback);
     t.Update(false);
     t.Update(false);
@@ -84,9 +85,9 @@ TEST(EventNodeTest, DumpToFdTest) {
 // Test GetValueIndex
 TEST(EventNodeTest, GetValueIndexTest) {
     std::string node_val = "uninitialize";
-    auto update_callback = [&node_val](const std::string &, const std::string &,
+    auto update_callback = [&node_val](const std::string &, const std::vector<std::string> &,
                                        const std::string &val) { node_val = val; };
-    EventNode t("EventName", "<Event>:Node", {{"value0"}, {"value1"}, {"value2"}}, 1, false,
+    EventNode t("EventName", {"<Event>:Node"}, {{"value0"}, {"value1"}, {"value2"}}, 1, false,
                 update_callback);
     std::size_t index = 0;
     EXPECT_TRUE(t.GetValueIndex("value2", &index));
@@ -99,9 +100,9 @@ TEST(EventNodeTest, GetValueIndexTest) {
 // Test GetValues
 TEST(EventNodeTest, GetValuesTest) {
     std::string node_val = "uninitialize";
-    auto update_callback = [&node_val](const std::string &, const std::string &,
+    auto update_callback = [&node_val](const std::string &, const std::vector<std::string> &,
                                        const std::string &val) { node_val = val; };
-    EventNode t("EventName", "<Event>:Node", {{"value0"}, {"value1"}, {"value2"}}, 1, false,
+    EventNode t("EventName", {"<Event>:Node"}, {{"value0"}, {"value1"}, {"value2"}}, 1, false,
                 update_callback);
     std::vector values = t.GetValues();
     EXPECT_EQ(3u, values.size());
@@ -113,13 +114,13 @@ TEST(EventNodeTest, GetValuesTest) {
 // Test get more properties
 TEST(EventNodeTest, GetPropertiesTest) {
     std::string node_val = "uninitialize";
-    auto update_callback = [&node_val](const std::string &, const std::string &,
+    auto update_callback = [&node_val](const std::string &, const std::vector<std::string> &,
                                        const std::string &val) { node_val = val; };
     std::string test_name = "TESTREQ_1";
     std::string test_path = "TEST_PATH";
-    EventNode t(test_name, test_path, {}, 0, false, update_callback);
+    EventNode t(test_name, {test_path}, {}, 0, false, update_callback);
     EXPECT_EQ(test_name, t.GetName());
-    EXPECT_EQ(test_path, t.GetPath());
+    EXPECT_THAT(t.GetPaths(), testing::ElementsAre(test_path));
     EXPECT_EQ(0u, t.GetValues().size());
     EXPECT_EQ(0u, t.GetDefaultIndex());
     EXPECT_FALSE(t.GetResetOnInit());
@@ -128,9 +129,9 @@ TEST(EventNodeTest, GetPropertiesTest) {
 // Test add request
 TEST(EventNodeTest, AddRequestTest) {
     std::string node_val = "uninitialize";
-    auto update_callback = [&node_val](const std::string &, const std::string &,
+    auto update_callback = [&node_val](const std::string &, const std::vector<std::string> &,
                                        const std::string &val) { node_val = val; };
-    EventNode t("EventName", "<Event>:Node", {{"value0"}, {"value1"}, {""}}, 2, true,
+    EventNode t("EventName", {"<Event>:Node"}, {{"value0"}, {"value1"}, {""}}, 2, true,
                 update_callback);
     auto start = std::chrono::steady_clock::now();
     EXPECT_TRUE(t.AddRequest(1, "INTERACTION", start + 500ms));
@@ -158,9 +159,9 @@ TEST(EventNodeTest, AddRequestTest) {
 // Test remove request
 TEST(EventNodeTest, RemoveRequestTest) {
     std::string node_val = "uninitialize";
-    auto update_callback = [&node_val](const std::string &, const std::string &,
+    auto update_callback = [&node_val](const std::string &, const std::vector<std::string> &,
                                        const std::string &val) { node_val = val; };
-    EventNode t("EventName", "<Event>:Node", {{"value0"}, {"value1"}, {"value2"}}, 2, true,
+    EventNode t("EventName", {"<Event>:Node"}, {{"value0"}, {"value1"}, {"value2"}}, 2, true,
                 update_callback);
     auto start = std::chrono::steady_clock::now();
     EXPECT_TRUE(t.AddRequest(1, "INTERACTION", start + 500ms));
@@ -188,9 +189,9 @@ TEST(EventNodeTest, RemoveRequestTest) {
 // Test add request
 TEST(EventNodeTest, AddRequestTestOverride) {
     std::string node_val = "uninitialize";
-    auto update_callback = [&node_val](const std::string &, const std::string &,
+    auto update_callback = [&node_val](const std::string &, const std::vector<std::string> &,
                                        const std::string &val) { node_val = val; };
-    EventNode t("EventName", "<Event>:Node", {{"value0"}, {"value1"}, {"value2"}}, 2, true,
+    EventNode t("EventName", {"<Event>:Node"}, {{"value0"}, {"value1"}, {"value2"}}, 2, true,
                 update_callback);
     auto start = std::chrono::steady_clock::now();
     EXPECT_TRUE(t.AddRequest(1, "INTERACTION", start + 500ms));

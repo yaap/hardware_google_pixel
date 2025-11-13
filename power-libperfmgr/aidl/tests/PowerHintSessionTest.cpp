@@ -16,6 +16,7 @@
 
 #include <aidl/android/hardware/power/SessionTag.h>
 #include <android-base/file.h>
+#include <android-base/parseint.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <sys/syscall.h>
@@ -167,11 +168,16 @@ class PowerHintSessionTest : public ::testing::Test {
             thread_vendor_attrs.push_back(attr);
         }
 
-        const int32_t tag_word_pos = 10;  // The adpf attribute position in dump log.
+        const int32_t tag_word_pos = 9;  // The user QOS attributes position in dump log.
         if (thread_vendor_attrs.size() < tag_word_pos + 1) {
             return false;
         }
-        *isActive = thread_vendor_attrs[tag_word_pos] == "1";
+        const int32_t adpf_bit_pos = 4;  // ADPF bit position in the user QOS variable.
+        int32_t vendor_qos_val;
+        if (!::android::base::ParseInt(thread_vendor_attrs[tag_word_pos], &vendor_qos_val)) {
+            return false;
+        }
+        *isActive = vendor_qos_val & (0x1 << adpf_bit_pos);
         return true;
     }
 };
@@ -363,6 +369,65 @@ TEST_F(PowerHintSessionMockedTest, updateSessionJankState) {
     ASSERT_EQ(SessionJankyLevel::SEVERE,
               mHintSession->updateSessionJankState(SessionJankyLevel::LIGHT, 9, 5.0, false));
 }
+
+using TestingPowerHintSessionHintMocked =
+        PowerHintSession<testing::NiceMock<mock::pixel::MockHintManager>,
+                         PowerSessionManager<testing::NiceMock<mock::pixel::MockHintManager>>>;
+
+enum class HintSendRequirement { SEND_HINT, DONT_SEND_HINT };
+struct SessionGPULoadUpHintParam {
+    SessionTag tag;
+    HintSendRequirement shouldSendHint;
+};
+
+static inline NiceMock<mock::pixel::MockHintManager> *primeHintManager(
+        std::shared_ptr<::android::perfmgr::AdpfConfig> const &config) {
+    auto mockHintManager = NiceMock<mock::pixel::MockHintManager>::GetInstance();
+    ON_CALL(*mockHintManager, GetAdpfProfile()).WillByDefault(Return(config));
+    ON_CALL(*mockHintManager, IsHintSupported("EXPENSIVE_RENDERING")).WillByDefault(Return(true));
+    return mockHintManager;
+}
+
+struct PowerHintSessionGpuLoadUpTest : TestWithParam<SessionGPULoadUpHintParam> {
+    PowerHintSessionGpuLoadUpTest() noexcept
+        : mTestConfig(std::make_shared<::android::perfmgr::AdpfConfig>(makeMockConfig())),
+          mMockHintManager(primeHintManager(mTestConfig)),
+          mHintSession(ndk::SharedRefBase::make<TestingPowerHintSessionHintMocked>(
+                  mTgid, mUid, std::vector<int>{mTid}, 1, GetParam().tag)) {}
+
+    ~PowerHintSessionGpuLoadUpTest() noexcept {
+        Mock::VerifyAndClearExpectations(mMockHintManager);
+    }
+
+  protected:
+    std::shared_ptr<::android::perfmgr::AdpfConfig> const mTestConfig;
+    NiceMock<mock::pixel::MockHintManager> *mMockHintManager;
+    std::shared_ptr<TestingPowerHintSessionHintMocked> mHintSession;
+
+    static constexpr int mTgid = 10000;
+    static constexpr int mUid = 1001;
+    static constexpr int mTid = 10000;
+};
+
+TEST_P(PowerHintSessionGpuLoadUpTest, sessionGPULoadUpHint) {
+    if (GetParam().shouldSendHint == HintSendRequirement::DONT_SEND_HINT) {
+        EXPECT_CALL(*mMockHintManager, DoHint(_)).Times(0);
+        EXPECT_CALL(*mMockHintManager, DoHint(_, _)).Times(0);
+    } else {
+        EXPECT_CALL(*mMockHintManager, DoHint("EXPENSIVE_RENDERING", Gt(1ms)))
+                .Times(1)
+                .WillOnce(Return(true));
+    }
+    EXPECT_TRUE(mHintSession->sendHint(SessionHint::GPU_LOAD_UP).isOk());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        GpuLoadUpTest, PowerHintSessionGpuLoadUpTest,
+        testing::Values(
+                SessionGPULoadUpHintParam{SessionTag::OTHER, HintSendRequirement::DONT_SEND_HINT},
+                SessionGPULoadUpHintParam{SessionTag::SYSUI, HintSendRequirement::SEND_HINT},
+                SessionGPULoadUpHintParam{SessionTag::SURFACEFLINGER,
+                                          HintSendRequirement::SEND_HINT}));
 
 }  // namespace pixel
 }  // namespace impl

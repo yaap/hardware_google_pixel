@@ -67,7 +67,7 @@ TEST_F(SessionRecordsTest, NoRecords) {
 }
 
 TEST_F(SessionRecordsTest, addReportedDurations) {
-    FrameBuckets buckets;
+    FrameTimingMetrics buckets;
     mRecords->addReportedDurations(fakeWorkDurations({3, 4, 3, 2}), MS_TO_NS(3), buckets);
     ASSERT_EQ(4, mRecords->getNumOfRecords());
     ASSERT_EQ(MS_TO_US(4), mRecords->getMaxDuration().value());
@@ -91,7 +91,7 @@ TEST_F(SessionRecordsTest, addReportedDurations) {
 }
 
 TEST_F(SessionRecordsTest, checkLowFrameRate) {
-    FrameBuckets buckets;
+    FrameTimingMetrics buckets;
     ASSERT_FALSE(mRecords->isLowFrameRate(25));
     mRecords->addReportedDurations(fakeWorkDurations({{0, 8}, {10, 9}, {20, 8}, {30, 8}}),
                                    MS_TO_NS(10), buckets);
@@ -112,7 +112,7 @@ TEST_F(SessionRecordsTest, checkLowFrameRate) {
 }
 
 TEST_F(SessionRecordsTest, switchTargetDuration) {
-    FrameBuckets buckets;
+    FrameTimingMetrics buckets;
     ASSERT_FALSE(mRecords->isLowFrameRate(25));
     mRecords->addReportedDurations(fakeWorkDurations({{0, 8}, {10, 9}, {20, 19}, {40, 8}}),
                                    MS_TO_NS(10), buckets);
@@ -138,7 +138,7 @@ TEST_F(SessionRecordsTest, switchTargetDuration) {
 }
 
 TEST_F(SessionRecordsTest, checkFPSJitters) {
-    FrameBuckets buckets;
+    FrameTimingMetrics buckets;
     ASSERT_EQ(0, mRecords->getNumOfFPSJitters());
     mRecords->addReportedDurations(fakeWorkDurations({{0, 8}, {10, 9}, {20, 8}, {30, 8}}),
                                    MS_TO_NS(10), buckets, true);
@@ -171,33 +171,94 @@ TEST_F(SessionRecordsTest, checkFPSJitters) {
 }
 
 TEST_F(SessionRecordsTest, updateFrameBuckets) {
-    FrameBuckets buckets;
+    FrameTimingMetrics timingInfo;
 
     mRecords->addReportedDurations(fakeWorkDurations({10, 11, 16, 17, 26, 40}), MS_TO_NS(10),
-                                   buckets);
-    ASSERT_EQ(6, buckets.totalNumOfFrames);
-    ASSERT_EQ(1, buckets.numOfFrames17to25ms);
-    ASSERT_EQ(1, buckets.numOfFrames25to34ms);
-    ASSERT_EQ(1, buckets.numOfFrames34to67ms);
-    ASSERT_EQ(0, buckets.numOfFrames67to100ms);
-    ASSERT_EQ(0, buckets.numOfFramesOver100ms);
+                                   timingInfo);
+    ASSERT_EQ(6, timingInfo.framesInBuckets.totalNumOfFrames);
+    ASSERT_EQ(1, timingInfo.framesInBuckets.numOfFrames17to25ms);
+    ASSERT_EQ(1, timingInfo.framesInBuckets.numOfFrames25to34ms);
+    ASSERT_EQ(1, timingInfo.framesInBuckets.numOfFrames34to67ms);
+    ASSERT_EQ(0, timingInfo.framesInBuckets.numOfFrames67to100ms);
+    ASSERT_EQ(0, timingInfo.framesInBuckets.numOfFramesOver100ms);
 
-    mRecords->addReportedDurations(fakeWorkDurations({80, 100}), MS_TO_NS(10), buckets);
-    ASSERT_EQ(8, buckets.totalNumOfFrames);
-    ASSERT_EQ(1, buckets.numOfFrames17to25ms);
-    ASSERT_EQ(1, buckets.numOfFrames25to34ms);
-    ASSERT_EQ(1, buckets.numOfFrames34to67ms);
-    ASSERT_EQ(1, buckets.numOfFrames67to100ms);
-    ASSERT_EQ(1, buckets.numOfFramesOver100ms);
+    mRecords->addReportedDurations(fakeWorkDurations({80, 100}), MS_TO_NS(10), timingInfo);
+    ASSERT_EQ(8, timingInfo.framesInBuckets.totalNumOfFrames);
+    ASSERT_EQ(1, timingInfo.framesInBuckets.numOfFrames17to25ms);
+    ASSERT_EQ(1, timingInfo.framesInBuckets.numOfFrames25to34ms);
+    ASSERT_EQ(1, timingInfo.framesInBuckets.numOfFrames34to67ms);
+    ASSERT_EQ(1, timingInfo.framesInBuckets.numOfFrames67to100ms);
+    ASSERT_EQ(1, timingInfo.framesInBuckets.numOfFramesOver100ms);
 
     FrameBuckets newBuckets{2, 1, 1, 1, 1, 0};
-    buckets.addUpNewFrames(newBuckets);
-    ASSERT_EQ(10, buckets.totalNumOfFrames);
-    ASSERT_EQ(2, buckets.numOfFrames17to25ms);
-    ASSERT_EQ(2, buckets.numOfFrames25to34ms);
-    ASSERT_EQ(2, buckets.numOfFrames34to67ms);
-    ASSERT_EQ(2, buckets.numOfFrames67to100ms);
-    ASSERT_EQ(1, buckets.numOfFramesOver100ms);
+    timingInfo.framesInBuckets.addUpNewFrames(newBuckets);
+    ASSERT_EQ(10, timingInfo.framesInBuckets.totalNumOfFrames);
+    ASSERT_EQ(2, timingInfo.framesInBuckets.numOfFrames17to25ms);
+    ASSERT_EQ(2, timingInfo.framesInBuckets.numOfFrames25to34ms);
+    ASSERT_EQ(2, timingInfo.framesInBuckets.numOfFrames34to67ms);
+    ASSERT_EQ(2, timingInfo.framesInBuckets.numOfFrames67to100ms);
+    ASSERT_EQ(1, timingInfo.framesInBuckets.numOfFramesOver100ms);
+
+    SessionMetrics sessMetric;
+    sessMetric.addNewFrames(timingInfo.framesInBuckets);
+    ASSERT_EQ(10, sessMetric.appFrameMetrics.value().totalNumOfFrames);
+    ASSERT_EQ(10, sessMetric.totalFrameNumber);
+    ASSERT_EQ(2, sessMetric.appFrameMetrics.value().numOfFrames17to25ms);
+    ASSERT_EQ(2, sessMetric.appFrameMetrics.value().numOfFrames25to34ms);
+    ASSERT_EQ(2, sessMetric.appFrameMetrics.value().numOfFrames34to67ms);
+    ASSERT_EQ(2, sessMetric.appFrameMetrics.value().numOfFrames67to100ms);
+    ASSERT_EQ(1, sessMetric.appFrameMetrics.value().numOfFramesOver100ms);
+}
+
+TEST_F(SessionRecordsTest, updateGameMetrics) {
+    FrameTimingMetrics frameMetrics;
+    mRecords->addReportedDurations(fakeWorkDurations({{8, 8}, {19, 9}, {28, 8}, {38, 8}}),
+                                   MS_TO_NS(10), frameMetrics, true);
+    std::vector<uint32_t> expectedFrameMs = {10, 10, 10};
+    std::vector<uint32_t> expectedDeltaMs = {0, 0};
+    ASSERT_EQ(expectedDeltaMs, frameMetrics.gameFrameMetrics.frameTimingDeltaMs);
+    ASSERT_EQ(expectedFrameMs, frameMetrics.gameFrameMetrics.frameTimingMs);
+    ASSERT_EQ(30, frameMetrics.gameFrameMetrics.totalFrameTimeMs);
+    ASSERT_EQ(3, frameMetrics.gameFrameMetrics.numOfFrames);
+
+    mRecords->addReportedDurations(fakeWorkDurations({{158, 118}, {169, 9}}), MS_TO_NS(10),
+                                   frameMetrics, true);
+    expectedFrameMs = {10, 10, 10, 10, 120};
+    expectedDeltaMs = {0, 0, 0, 110};
+    ASSERT_EQ(expectedDeltaMs, frameMetrics.gameFrameMetrics.frameTimingDeltaMs);
+    ASSERT_EQ(expectedFrameMs, frameMetrics.gameFrameMetrics.frameTimingMs);
+    ASSERT_EQ(160, frameMetrics.gameFrameMetrics.totalFrameTimeMs);
+    ASSERT_EQ(5, frameMetrics.gameFrameMetrics.numOfFrames);
+
+    mRecords->addReportedDurations(fakeWorkDurations({{179, 9}, {189, 9}}), MS_TO_NS(10),
+                                   frameMetrics, false);
+    expectedFrameMs = {10, 10, 10, 10, 120};
+    expectedDeltaMs = {0, 0, 0, 110};
+    ASSERT_EQ(expectedDeltaMs, frameMetrics.gameFrameMetrics.frameTimingDeltaMs);
+    ASSERT_EQ(expectedFrameMs, frameMetrics.gameFrameMetrics.frameTimingMs);
+    ASSERT_EQ(160, frameMetrics.gameFrameMetrics.totalFrameTimeMs);
+    ASSERT_EQ(5, frameMetrics.gameFrameMetrics.numOfFrames);
+
+    SessionMetrics sessMetric;
+    sessMetric.addNewFrames(frameMetrics.gameFrameMetrics);
+    auto lastIndex = sessMetric.gameFrameMetrics.value().frameTimingMs.size() - 1;
+    ASSERT_EQ(4, sessMetric.gameFrameMetrics.value().frameTimingMs[10]);
+    ASSERT_EQ(1, sessMetric.gameFrameMetrics.value().frameTimingMs[lastIndex]);
+    ASSERT_EQ(3, sessMetric.gameFrameMetrics.value().frameTimingDeltaMs[0]);
+    ASSERT_EQ(1, sessMetric.gameFrameMetrics.value().frameTimingDeltaMs[lastIndex]);
+    // Each frame's duration is capped to the metric bucket size, which is 100 (ms).
+    ASSERT_EQ(140, sessMetric.gameFrameMetrics.value().totalFrameTimeMs);
+    ASSERT_EQ(5, sessMetric.gameFrameMetrics.value().numOfFrames);
+
+    GameFrameMetrics newFrames{{10, 1000}, {5, 990}, 1010, 2};
+    sessMetric.addNewFrames(newFrames);
+    ASSERT_EQ(5, sessMetric.gameFrameMetrics.value().frameTimingMs[10]);
+    ASSERT_EQ(2, sessMetric.gameFrameMetrics.value().frameTimingMs[lastIndex]);
+    ASSERT_EQ(3, sessMetric.gameFrameMetrics.value().frameTimingDeltaMs[0]);
+    ASSERT_EQ(1, sessMetric.gameFrameMetrics.value().frameTimingDeltaMs[5]);
+    ASSERT_EQ(2, sessMetric.gameFrameMetrics.value().frameTimingDeltaMs[lastIndex]);
+    ASSERT_EQ(250, sessMetric.gameFrameMetrics.value().totalFrameTimeMs);
+    ASSERT_EQ(7, sessMetric.gameFrameMetrics.value().numOfFrames);
 }
 
 }  // namespace pixel

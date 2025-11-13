@@ -69,7 +69,7 @@ using android::hardware::google::pixel::PixelAtoms::PartitionsUsedSpaceReported;
 using android::hardware::google::pixel::PixelAtoms::PcieLinkStatsReported;
 using android::hardware::google::pixel::PixelAtoms::StorageUfsHealth;
 using android::hardware::google::pixel::PixelAtoms::StorageUfsResetCount;
-using android::hardware::google::pixel::PixelAtoms::ThermalDfsStats;
+using android::hardware::google::pixel::PixelAtoms::StorageUfsErrorCountReported;
 using android::hardware::google::pixel::PixelAtoms::VendorAudioAdaptedInfoStatsReported;
 using android::hardware::google::pixel::PixelAtoms::VendorAudioBtMediaStatsReported;
 using android::hardware::google::pixel::PixelAtoms::VendorAudioHardwareStatsReported;
@@ -89,9 +89,10 @@ using android::hardware::google::pixel::PixelAtoms::VendorTempResidencyStats;
 using android::hardware::google::pixel::PixelAtoms::WaterEventReported;
 using android::hardware::google::pixel::PixelAtoms::ZramBdStat;
 using android::hardware::google::pixel::PixelAtoms::ZramMmStat;
+using android::hardware::google::pixel::PixelAtoms::UfsStorageTypeReported;
 
-SysfsCollector::SysfsCollector(const Json::Value& configData)
-    : configData(configData) {}
+SysfsCollector::SysfsCollector(const Json::Value &configData)
+    : configData(configData), thermal_stats_reporter_(configData) {}
 
 bool SysfsCollector::ReadFileToInt(const std::string &path, int *val) {
     return ReadFileToInt(path.c_str(), val);
@@ -164,9 +165,9 @@ void SysfsCollector::logBatteryChargeCycles(const std::shared_ptr<IStats> &stats
 void SysfsCollector::logBatteryEEPROM(const std::shared_ptr<IStats> &stats_client) {
     std::string EEPROMPath = getCStringOrDefault(configData, "EEPROMPath");
     std::vector<std::string> GMSRPath = readStringVectorFromJson(configData["GMSRPath"]);
-    std::string maxfgHistoryPath = getCStringOrDefault(configData, "MaxfgHistoryPath");
     std::vector<std::string> FGModelLoadingPath = readStringVectorFromJson(configData["FGModelLoadingPath"]);
     std::vector<std::string> FGLogBufferPath = readStringVectorFromJson(configData["FGLogBufferPath"]);
+    std::string maxfgHistoryPath = "/dev/maxfg_history";
 
     if (EEPROMPath.empty()) {
         ALOGV("Battery EEPROM path not specified in JSON");
@@ -178,20 +179,7 @@ void SysfsCollector::logBatteryEEPROM(const std::shared_ptr<IStats> &stats_clien
     battery_EEPROM_reporter_.checkAndReportMaxfgHistory(stats_client, maxfgHistoryPath);
     battery_EEPROM_reporter_.checkAndReportFGModelLoading(stats_client, FGModelLoadingPath);
     battery_EEPROM_reporter_.checkAndReportFGLearning(stats_client, FGLogBufferPath);
-}
-
-/**
- * Log battery history validation
- */
-void SysfsCollector::logBatteryHistoryValidation() {
-    const std::shared_ptr<IStats> stats_client = getStatsService();
-    if (!stats_client) {
-        ALOGE("Unable to get AIDL Stats service");
-        return;
-    }
-
-    std::vector<std::string> FGLogBufferPath = readStringVectorFromJson(configData["FGLogBufferPath"]);
-    battery_EEPROM_reporter_.checkAndReportValidation(stats_client, FGLogBufferPath);
+    battery_EEPROM_reporter_.checkAndReportHistValid(stats_client, FGLogBufferPath);
 }
 
 /**
@@ -456,9 +444,13 @@ void SysfsCollector::logHDCPStats(const std::shared_ptr<IStats> &stats_client) {
 }
 
 void SysfsCollector::logThermalStats(const std::shared_ptr<IStats> &stats_client) {
+    //**************** Legacy dfs stats monitoring. ************************//
     std::vector<std::string> thermalStatsPaths =
         readStringVectorFromJson(configData["ThermalStatsPaths"]);
-    thermal_stats_reporter_.logThermalStats(stats_client, thermalStatsPaths);
+    thermal_stats_reporter_.logThermalDfsStats(stats_client, thermalStatsPaths);
+
+    //************** Tj trip count monitoring. ***********************//
+    thermal_stats_reporter_.logTjTripCountStats(stats_client);
 }
 
 void SysfsCollector::logDisplayPortDSCStats(const std::shared_ptr<IStats> &stats_client) {
@@ -595,37 +587,111 @@ void SysfsCollector::logUFSLifetime(const std::shared_ptr<IStats> &stats_client)
     }
 }
 
-void SysfsCollector::logUFSErrorStats(const std::shared_ptr<IStats> &stats_client) {
-    int value, host_reset_count = 0;
-
-    std::vector<std::string> UFSErrStatsPath = readStringVectorFromJson(configData["UFSErrStatsPath"]);
-
-    if (UFSErrStatsPath.empty() || strlen(UFSErrStatsPath.front().c_str()) == 0) {
-        ALOGV("UFS host reset count path not specified in JSON");
+void SysfsCollector::logUFSErrorsCount(const std::shared_ptr<IStats> &stats_client) {
+    std::string bootDevice = android::base::GetProperty("ro.boot.bootdevice", "");
+    if (bootDevice.empty()) {
+        ALOGW("ro.boot.bootdevice property is empty.");
         return;
     }
 
-    for (int i = 0; i < UFSErrStatsPath.size(); i++) {
-        if (!ReadFileToInt(UFSErrStatsPath[i], &value)) {
-            ALOGE("Unable to read host reset count");
-            return;
+    std::string baseUfsPath = "/sys/devices/platform/" + bootDevice + "/err_stats/";
+
+    static constexpr std::array<std::string_view, 13> errorNodes = {
+        "auto_hibern8_err_count",
+        "dev_reset_count",
+        "dl_err_count",
+        "dme_err_count",
+        "fatal_err_count",
+        "host_reset_count",
+        "link_startup_err_count",
+        "nl_err_count",
+        "pa_err_count",
+        "resume_err_count",
+        "suspend_err_count",
+        "task_abort_count",
+        "tl_err_count"
+    };
+
+    std::vector<VendorAtomValue> values(errorNodes.size());
+    std::vector<int32_t> counts(errorNodes.size());
+
+    for (size_t errorTypeIndex = 0; errorTypeIndex < errorNodes.size(); ++errorTypeIndex) {
+        std::string fullPath = baseUfsPath + std::string(errorNodes[errorTypeIndex]); // Convert string_view to string.
+
+        if (!ReadFileToInt(fullPath, &counts[errorTypeIndex])) {
+            ALOGE("Unable to read ufs error (%s): %s",
+                  std::string(errorNodes[errorTypeIndex]).c_str(), fullPath.c_str());
+            counts[errorTypeIndex] = 0;
         }
-        host_reset_count += value;
     }
 
     // Load values array
-    std::vector<VendorAtomValue> values(1);
-    VendorAtomValue tmp;
-    tmp.set<VendorAtomValue::intValue>(host_reset_count);
-    values[StorageUfsResetCount::kHostResetCountFieldNumber - kVendorAtomOffset] = tmp;
+    values[StorageUfsErrorCountReported::kAutoHibern8ErrCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[0]); // auto_hibern8_err_count
+    values[StorageUfsErrorCountReported::kDevResetCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[1]); // dev_reset_count
+    values[StorageUfsErrorCountReported::kDlErrCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[2]); // dl_err_count
+    values[StorageUfsErrorCountReported::kDmeErrCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[3]); // dme_err_count
+    values[StorageUfsErrorCountReported::kFatalErrCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[4]); // fatal_err_count
+    values[StorageUfsErrorCountReported::kHostResetCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[5]); // host_reset_count
+    values[StorageUfsErrorCountReported::kLinkStartupErrCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[6]); // link_startup_err_count
+    values[StorageUfsErrorCountReported::kNlErrCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[7]); // nl_err_count
+    values[StorageUfsErrorCountReported::kPaErrCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[8]); // pa_err_count
+    values[StorageUfsErrorCountReported::kResumeErrCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[9]); // resume_err_count
+    values[StorageUfsErrorCountReported::kSuspendErrCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[10]); // suspend_err_count
+    values[StorageUfsErrorCountReported::kTaskAbortCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[11]); // task_abort_count
+    values[StorageUfsErrorCountReported::kTlErrCountFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(counts[12]); // tl_err_count
 
     // Send vendor atom to IStats HAL
-    VendorAtom event = {.reverseDomainName = "",
-                        .atomId = PixelAtoms::Atom::kUfsResetCount,
+    VendorAtom event = {.reverseDomainName = PixelAtoms::ReverseDomainNames().pixel(),
+                        .atomId = PixelAtoms::Atom::kStorageUfsErrorCountReported,
+                        .values = std::move(values)};
+
+    const ndk::ScopedAStatus ret = stats_client->reportVendorAtom(event);
+    if (!ret.isOk()) {
+        ALOGE("Unable to report StorageUfsErrorCountReported to Stats service");
+    }
+}
+
+void SysfsCollector::logUfsStorageType() {
+    const std::shared_ptr<IStats> stats_client = getStatsService();
+    if (!stats_client) {
+        ALOGE("Unable to get AIDL Stats service");
+        return;
+    }
+    int ufs_type = 0;
+    bool zufs_provisioned = android::base::GetBoolProperty(
+        "ro.vendor.product.ufs_type_zufs", false);
+    ALOGD("Property ro.vendor.product.ufs_type_zufs: %s", zufs_provisioned ? "true" : "false");
+
+    if (zufs_provisioned)
+        ufs_type = UfsStorageTypeReported::ZUFS;
+    else
+        ufs_type = UfsStorageTypeReported::CONVENTIONAL;
+
+    // Load values array
+    std::vector<VendorAtomValue> values(1);
+    values[UfsStorageTypeReported::kUfsTypeFieldNumber - kVendorAtomOffset] =
+        VendorAtomValue::make<VendorAtomValue::intValue>(ufs_type);
+
+    // Send vendor atom to IStats HAL
+    VendorAtom event = {.reverseDomainName = PixelAtoms::ReverseDomainNames().pixel(),
+                        .atomId = PixelAtoms::Atom::kUfsStorageTypeReported,
                         .values = std::move(values)};
     const ndk::ScopedAStatus ret = stats_client->reportVendorAtom(event);
     if (!ret.isOk()) {
-        ALOGE("Unable to report UFS host reset count to Stats service");
+        ALOGE("Unable to report UfsStorageTypeReported to Stats service");
     }
 }
 
@@ -941,6 +1007,13 @@ void SysfsCollector::logF2fsSmartIdleMaintEnabled(const std::shared_ptr<IStats> 
 }
 
 void SysfsCollector::logDmVerityPartitionReadAmount(const std::shared_ptr<IStats> &stats_client) {
+    // Check if DmVerityPartitionReadAmount is false in the configuration.
+    std::string dmVerityValue = getCStringOrDefault(configData, "DmVerityPartitionReadAmount");
+    if (dmVerityValue == "false") {
+        ALOGV("DmVerityPartitionReadAmount is false, skipping.");
+        return; // Return directly if the flag is false.
+    }
+
     //  Array of partition names corresponding to the DmPartition enum.
     static constexpr std::array<std::string_view, 4>
         partitionNames = {"system", "system_ext", "product", "vendor"};
@@ -954,8 +1027,6 @@ void SysfsCollector::logDmVerityPartitionReadAmount(const std::shared_ptr<IStats
 
     size_t partitionIndex = 0;
     for (const auto& partitionName : partitionNames) {
-        ++partitionIndex;
-
         // Construct the partition name with slot suffix
         std::string fullPartitionName = std::string(partitionName) + slotSuffix;
 
@@ -1020,6 +1091,7 @@ void SysfsCollector::logDmVerityPartitionReadAmount(const std::shared_ptr<IStats
         if (!ret.isOk()) {
             ALOGE("Unable to report DmVerityPartitionReadAmountReported to Stats service");
         }
+        ++partitionIndex;
     }
     return;
 }
@@ -2252,7 +2324,6 @@ void SysfsCollector::logPerDay() {
     logBatteryEEPROM(stats_client);
     logBatteryHealth(stats_client);
     logBatteryTTF(stats_client);
-    logBatteryHistoryValidation();
     logBlockStatsReported(stats_client);
     logCodec1Failed(stats_client);
     logCodecFailed(stats_client);
@@ -2271,7 +2342,7 @@ void SysfsCollector::logPerDay() {
     logSpeakerImpedance(stats_client);
     logSpeechDspStat(stats_client);
     logUFSLifetime(stats_client);
-    logUFSErrorStats(stats_client);
+    logUFSErrorsCount(stats_client);
     logSpeakerHealthStats(stats_client);
     mm_metrics_reporter_.logCmaStatus(stats_client);
     mm_metrics_reporter_.logPixelMmMetricsPerDay(stats_client);
@@ -2296,23 +2367,6 @@ void SysfsCollector::aggregatePer5Min() {
     mm_metrics_reporter_.aggregatePixelMmMetricsPer5Min();
 }
 
-void SysfsCollector::logBrownout() {
-    const std::shared_ptr<IStats> stats_client = getStatsService();
-    if (!stats_client) {
-        ALOGE("Unable to get AIDL Stats service");
-        return;
-    }
-    std::string brownoutCsvPath = getCStringOrDefault(configData, "BrownoutCsvPath");
-    std::string brownoutLogPath = getCStringOrDefault(configData, "BrownoutLogPath");
-    std::string brownoutReasonProp = getCStringOrDefault(configData, "BrownoutReasonProp");
-    if (brownoutCsvPath.empty())
-        brownout_detected_reporter_.logBrownoutCsv(stats_client, brownoutCsvPath.c_str(),
-                                                   brownoutReasonProp);
-    else if (brownoutLogPath.empty())
-        brownout_detected_reporter_.logBrownout(stats_client, brownoutLogPath.c_str(),
-                                                brownoutReasonProp);
-}
-
 void SysfsCollector::logWater() {
     const std::shared_ptr<IStats> stats_client = getStatsService();
     if (!stats_client) {
@@ -2325,7 +2379,7 @@ void SysfsCollector::logWater() {
 }
 
 void SysfsCollector::logOnce() {
-    logBrownout();
+    logUfsStorageType();
     logWater();
 }
 

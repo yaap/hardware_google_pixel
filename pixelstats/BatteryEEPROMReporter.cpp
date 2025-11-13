@@ -62,6 +62,26 @@ bool BatteryEEPROMReporter::ReadFileToInt(const std::string &path, int32_t *val)
     return true;
 }
 
+bool BatteryEEPROMReporter::checkCycleCountRollback() {
+    const std::string cycle_count_path(BATTERY_CYCLE_COUNT_PATH);
+    int cycle_count;
+
+    if (ReadFileToInt(cycle_count_path.c_str(), &cycle_count) && cycle_count > 0) {
+        if (last_cycle_count == 0) {
+            last_cycle_count = cycle_count;
+            return false;
+        }
+
+        if (cycle_count < last_cycle_count) {
+            ALOGD("Cycle count rollback from %d to %d", last_cycle_count, cycle_count);
+            last_cycle_count = cycle_count;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 std::string BatteryEEPROMReporter::checkPaths(const std::vector<std::string>& paths) {
     if (paths.empty()) {
         return ""; // Or throw an exception if appropriate
@@ -81,14 +101,13 @@ void BatteryEEPROMReporter::checkAndReport(const std::shared_ptr<IStats> &stats_
     std::string file_contents;
     std::string history_each;
     std::string cycle_count;
-
     const std::string cycle_count_path(BATTERY_CYCLE_COUNT_PATH);
     int sparse_index_count = 0;
-
     const int kSecondsPerMonth = 60 * 60 * 24 * 30;
     int64_t now = getTimeSecs();
 
-    if ((report_time_ != 0) && (now - report_time_ < kSecondsPerMonth)) {
+    if (!checkCycleCountRollback() && (report_time_ != 0) &&
+        (now - report_time_ < kSecondsPerMonth)) {
         ALOGD("Not upload time. now: %" PRId64 ", pre: %" PRId64, now, report_time_);
         return;
     }
@@ -348,9 +367,6 @@ void BatteryEEPROMReporter::checkAndReportFGModelLoading(const std::shared_ptr<I
     int num;
     const char *data;
 
-    if (path.empty())
-        return;
-
     /* not found */
     if (path.empty())
         return;
@@ -389,14 +405,17 @@ void BatteryEEPROMReporter::checkAndReportFGLearning(const std::shared_ptr<IStat
 
     clock_gettime(CLOCK_MONOTONIC, &boot_time);
 
-    readLogbuffer(path, kNumFGLearningFieldsV3, params.checksum, format, last_lh_check_, events);
+    readLogbuffer(path, kNumFGLearningFieldsV4, params.checksum, format, last_lh_check_, events);
+    if (events.size() == 0)
+        readLogbuffer(path, kNumFGLearningFieldsV3, params.checksum, format, last_lh_check_, events);
     if (events.size() == 0)
         readLogbuffer(path, kNumFGLearningFieldsV2, params.checksum, format, last_lh_check_, events);
 
     for (int event_idx = 0; event_idx < events.size(); event_idx++) {
         std::vector<uint32_t> &event = events[event_idx];
         if (event.size() == kNumFGLearningFieldsV2 ||
-            event.size() == kNumFGLearningFieldsV3) {
+            event.size() == kNumFGLearningFieldsV3 ||
+            event.size() == kNumFGLearningFieldsV4) {
             params.full_cap = event[0];                /* fcnom */
             params.esr = event[1];                     /* dpacc */
             params.rslow = event[2];                   /* dqacc */
@@ -413,8 +432,14 @@ void BatteryEEPROMReporter::checkAndReportFGLearning(const std::shared_ptr<IStat
             params.cycle_cnt = event[13];              /* vfocf */
             params.rcomp0 = event[14];                 /* rcomp0 */
             params.tempco = event[15];                 /* tempco */
-            if (event.size() == kNumFGLearningFieldsV3)
+            if (event.size() >= kNumFGLearningFieldsV3)
                 params.soh = event[16];                /* unix time */
+            if (event.size() == kNumFGLearningFieldsV4) {
+                params.cutoff_soc = event[17];         /* cotrim */
+                params.cc_soc = event[18];             /* coff */
+                params.batt_temp = event[19];          /* lock_1 */
+                params.timer_h = event[20];            /* lock_2 */
+            }
         } else {
             ALOGE("Not support %zu fields for FG learning event", event.size());
             continue;
@@ -424,12 +449,11 @@ void BatteryEEPROMReporter::checkAndReportFGLearning(const std::shared_ptr<IStat
     last_lh_check_ = (unsigned int)boot_time.tv_sec;
 }
 
-void BatteryEEPROMReporter::checkAndReportValidation(const std::shared_ptr<IStats> &stats_client,
+void BatteryEEPROMReporter::checkAndReportHistValid(const std::shared_ptr<IStats> &stats_client,
                                                      const std::vector<std::string> &paths) {
     struct BatteryEEPROMPipeline params = {.checksum = EvtHistoryValidation};
     std::string path = checkPaths(paths);
     struct timespec boot_time;
-    auto format = FormatIgnoreAddr;
     std::vector<std::vector<uint32_t>> events;
 
     if (path.empty())
@@ -437,7 +461,12 @@ void BatteryEEPROMReporter::checkAndReportValidation(const std::shared_ptr<IStat
 
     clock_gettime(CLOCK_MONOTONIC, &boot_time);
 
-    readLogbuffer(path, kNumValidationFields, params.checksum, format, last_hv_check_, events);
+    readLogbuffer(path, kNumValidationFieldsV2, params.checksum, FormatOnlyVal, last_hv_check_,
+                  events);
+    if (events.size() == 0)
+        readLogbuffer(path, kNumValidationFields, params.checksum, FormatIgnoreAddr,
+                      last_hv_check_, events);
+
     for (int event_idx = 0; event_idx < events.size(); event_idx++) {
         std::vector<uint32_t> &event = events[event_idx];
         if (event.size() == kNumValidationFields) {
@@ -446,10 +475,18 @@ void BatteryEEPROMReporter::checkAndReportValidation(const std::shared_ptr<IStat
             params.rslow = event[2];    /* last cycle count */
             params.full_rep = event[3]; /* estimate cycle count after recovery */
             reportEvent(stats_client, params);
-            /* force report history metrics if it was recovered */
-            if (last_hv_check_ != 0) {
-                report_time_ = 0;
-            }
+        } else if (event.size() == kNumValidationFieldsV2) {
+            params.cycle_cnt = event[0];/* log type */
+            params.full_cap = event[1]; /* first empty entry */
+            params.esr = event[2];      /* first misplaced entry */
+            params.rslow = event[3];    /* first migrated entry */
+            params.batt_temp = event[4];/* last migrated entry */
+            params.cutoff_soc = event[5];/* last cycle count */
+            params.cc_soc = event[6];   /* current cycle count */
+            params.sys_soc = event[7];  /* eeprom cycle count */
+            params.msoc = event[8];     /* result */
+            params.soh = event[9];      /* unix time */
+            reportEvent(stats_client, params);
         } else {
             ALOGE("Not support %zu fields for History Validation event", event.size());
         }

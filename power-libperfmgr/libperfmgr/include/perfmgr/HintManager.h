@@ -82,6 +82,12 @@ struct Hint {
     std::shared_ptr<HintStatus> status GUARDED_BY(hint_lock);
 };
 
+struct OtherConfigs {
+    std::optional<std::string> GPUSysfsPath;
+    std::optional<bool> enableMetricCollection;
+    std::optional<uint32_t> maxNumOfCachedSessionMetrics;
+};
+
 // HintManager is the external interface of the library to be used by PowerHAL
 // to do power hints with sysfs nodes. HintManager maintains a representation of
 // the actions that are parsed from the configuration file as a mapping from a
@@ -91,13 +97,13 @@ class HintManager {
     HintManager(sp<NodeLooperThread> nm, const std::unordered_map<std::string, Hint> &actions,
                 const std::vector<std::shared_ptr<AdpfConfig>> &adpfs,
                 const std::unordered_map<std::string, std::shared_ptr<AdpfConfig>> &tag_adpfs,
-                std::optional<std::string> gpu_sysfs_config_path)
+                const OtherConfigs &other_configs)
         : nm_(std::move(nm)),
           actions_(actions),
           adpfs_(adpfs),
           tag_profile_map_(tag_adpfs),
           adpf_index_(0),
-          gpu_sysfs_config_path_(gpu_sysfs_config_path) {}
+          other_configs_(other_configs) {}
     ~HintManager() {
         if (nm_.get() != nullptr) nm_->Stop();
     }
@@ -140,6 +146,9 @@ class HintManager {
     // get current ADPF.
     std::shared_ptr<AdpfConfig> GetAdpfProfile(const std::string &node_name = "OTHER") const;
 
+    // get other configurations
+    OtherConfigs GetOtherConfigs() const;
+
     // Check if ADPF is supported.
     bool IsAdpfSupported() const;
 
@@ -169,6 +178,7 @@ class HintManager {
     static std::unordered_map<std::string, Hint> ParseActions(
             const std::string &json_doc, const std::vector<std::unique_ptr<Node>> &nodes);
     static std::vector<std::shared_ptr<AdpfConfig>> ParseAdpfConfigs(const std::string &json_doc);
+    static OtherConfigs ParseOtherConfigs(const std::string &json_doc);
     static bool InitHintStatus(const std::unique_ptr<HintManager> &hm);
 
     static void Reload(bool start);
@@ -184,20 +194,24 @@ class HintManager {
     void DoHintAction(const std::string &hint_type);
     // Helper function to take hint actions when EndHint
     void EndHintAction(const std::string &hint_type);
+    // Dump the "OtherConfigs" parts in the parsed configuration file.
+    void DumpOtherConfigs(int fd);
+
     sp<NodeLooperThread> nm_;
     std::unordered_map<std::string, Hint> actions_;
     std::vector<std::shared_ptr<AdpfConfig>> adpfs_;
     // TODO(jimmyshiu@): Need to be removed once all powerhint.json up-to-date.
     std::unordered_map<std::string, std::shared_ptr<AdpfConfig>> tag_profile_map_;
     uint32_t adpf_index_;
-    std::optional<std::string> gpu_sysfs_config_path_;
 
     static std::unique_ptr<HintManager> sInstance;
 
     // Hint Update Callback
-    void OnNodeUpdate(const std::string &name, const std::string &path, const std::string &value);
+    void OnNodeUpdate(const std::string &name, const std::vector<std::string> &paths, const std::string &value);
     // set ADPF config by hint name.
     std::unordered_map<std::string, std::vector<AdpfCallback *>> tag_update_callback_list_;
+    // Other configurations
+    OtherConfigs other_configs_;
 };
 
 }  // namespace perfmgr

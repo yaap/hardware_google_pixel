@@ -62,7 +62,7 @@ class Node {
     virtual std::chrono::milliseconds Update(bool log_error) = 0;
 
     const std::string& GetName() const;
-    const std::string& GetPath() const;
+    const std::vector<std::string> &GetPaths() const;
     std::vector<std::string> GetValues() const;
     std::size_t GetDefaultIndex() const;
     bool GetResetOnInit() const;
@@ -70,14 +70,13 @@ class Node {
     virtual void DumpToFd(int fd) const = 0;
 
   protected:
-    Node(std::string name, std::string node_path,
-         std::vector<RequestGroup> req_sorted, std::size_t default_val_index,
-         bool reset_on_init);
+    Node(std::string name, std::vector<std::string> node_paths,
+         std::vector<RequestGroup> req_sorted, std::size_t default_val_index, bool reset_on_init);
     Node(const Node& other) = delete;
     Node& operator=(Node const&) = delete;
 
     const std::string name_;
-    const std::string node_path_;
+    const std::vector<std::string> node_paths_;
     // request vector, one entry per possible value, sorted by priority.
     std::vector<RequestGroup> req_sorted_;
     const std::size_t default_val_index_;

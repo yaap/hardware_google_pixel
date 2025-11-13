@@ -55,17 +55,18 @@ constexpr char kJSON_RAW[] = R"(
         },
         {
             "Name": "CPUCluster1MinFreq",
-            "Path": "/sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq",
+            "Paths": ["/sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq"],
             "Values": [
                 "1512000",
                 "1134000",
                 "384000"
             ],
-            "HoldFd": true
+            "HoldFd": true,
+            "AllowFailure": true
         },
         {
             "Name": "ModeProperty",
-            "Path": "vendor.pwhal.mode",
+            "Paths": ["vendor.pwhal.mode"],
             "Values": [
                 "HIGH",
                 "LOW",
@@ -75,7 +76,7 @@ constexpr char kJSON_RAW[] = R"(
         },
         {
             "Name": "TestEnableProperty",
-            "Path": "vendor.pwhal.enable.test",
+            "Paths": ["vendor.pwhal.enable.test"],
             "Values": [
                 "0",
                 "1"
@@ -157,7 +158,7 @@ constexpr char kJSON_ADPF[] = R"(
     "Nodes": [
         {
             "Name": "OTHER",
-            "Path": "<AdpfConfig>:OTHER",
+            "Paths": ["<AdpfConfig>:OTHER"],
             "Values": [
                 "ADPF_DEFAULT"
             ],
@@ -165,7 +166,7 @@ constexpr char kJSON_ADPF[] = R"(
         },
         {
             "Name": "SURFACEFLINGER",
-            "Path": "<AdpfConfig>:SURFACEFLINGER",
+            "Paths": ["<AdpfConfig>:SURFACEFLINGER"],
             "Values": [
                 "ADPF_DEFAULT",
                 "ADPF_SF"
@@ -289,7 +290,11 @@ constexpr char kJSON_ADPF[] = R"(
             "MaxRecordsNum": 50
         }
     ],
-    "GpuSysfsPath" : "/sys/devices/platform/123.abc"
+    "GpuSysfsPath" : "/sys/devices/platform/123.abc",
+    "OtherConfigs": {
+        "EnableMetricCollection": true,
+        "MaxNumOfCachedSessionMetrics": 100
+    }
 }
 )";
 
@@ -297,7 +302,7 @@ class HintManagerTest : public ::testing::Test, public HintManager {
   protected:
     HintManagerTest()
         : HintManager(nullptr, std::unordered_map<std::string, Hint>{},
-                      std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_, {}) {
+                      std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_, other_configs_) {
         android::base::SetMinimumLogSeverity(android::base::VERBOSE);
         prop_ = "vendor.pwhal.mode";
     }
@@ -306,16 +311,16 @@ class HintManagerTest : public ::testing::Test, public HintManager {
         // Set up 3 dummy nodes
         std::unique_ptr<TemporaryFile> tf = std::make_unique<TemporaryFile>();
         nodes_.emplace_back(new FileNode(
-            "n0", tf->path, {{"n0_value0"}, {"n0_value1"}, {"n0_value2"}}, 2,
-            false, false));
+            "n0", {tf->path}, {{"n0_value0"}, {"n0_value1"}, {"n0_value2"}}, 2,
+            false, false, false));
         files_.emplace_back(std::move(tf));
         tf = std::make_unique<TemporaryFile>();
         nodes_.emplace_back(new FileNode(
-            "n1", tf->path, {{"n1_value0"}, {"n1_value1"}, {"n1_value2"}}, 2,
-            true, true));
+            "n1", {tf->path}, {{"n1_value0"}, {"n1_value1"}, {"n1_value2"}}, 2,
+            true, true, false, true));
         files_.emplace_back(std::move(tf));
         nodes_.emplace_back(new PropertyNode(
-            "n2", prop_, {{"n2_value0"}, {"n2_value1"}, {"n2_value2"}}, 2,
+            "n2", {prop_}, {{"n2_value0"}, {"n2_value1"}, {"n2_value2"}}, 2,
             true));
         nm_ = new NodeLooperThread(std::move(nodes_));
         // Set up dummy actions
@@ -361,31 +366,33 @@ class HintManagerTest : public ::testing::Test, public HintManager {
     std::string json_doc_;
     std::string prop_;
     std::unordered_map<std::string, std::shared_ptr<AdpfConfig>> tag_adpfs_;
+    OtherConfigs other_configs_;
 };
 
-static inline void _VerifyPropertyValue(const std::string& path,
-                                        const std::string& value) {
-    std::string s = android::base::GetProperty(path, "");
-    EXPECT_EQ(value, s);
-}
+#define VERIFY_PROPERTY_VALUE(path, expected_value)           \
+    {                                                         \
+        std::string s = android::base::GetProperty(path, ""); \
+        EXPECT_EQ(expected_value, s);                         \
+    }
 
-static inline void _VerifyPathValue(const std::string& path,
-                                    const std::string& value) {
-    std::string s;
-    EXPECT_TRUE(android::base::ReadFileToString(path, &s)) << strerror(errno);
-    EXPECT_EQ(value, s);
-}
+#define VERIFY_PATH_VALUE(path, expected_value)                                    \
+    {                                                                              \
+        std::string s;                                                             \
+        EXPECT_TRUE(android::base::ReadFileToString(path, &s)) << strerror(errno); \
+        EXPECT_EQ(expected_value, s);                                              \
+    }
 
-static inline void _VerifyStats(const HintStats &stats, uint32_t count, uint64_t duration_min,
-                                uint64_t duration_max) {
-    EXPECT_EQ(stats.count, count);
-    EXPECT_GE(stats.duration_ms, duration_min);
-    EXPECT_LT(stats.duration_ms, duration_max);
-}
+#define VERIFY_STATS(stats, expected_count, expected_duration_min, expected_duration_max) \
+    {                                                                                     \
+        EXPECT_EQ(stats.count, expected_count);                                           \
+        EXPECT_GE(stats.duration_ms, expected_duration_min);                              \
+        EXPECT_LT(stats.duration_ms, expected_duration_max);                              \
+    }
 
 // Test GetHints
 TEST_F(HintManagerTest, GetHintsTest) {
-    HintManager hm(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_, {});
+    HintManager hm(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_,
+                   other_configs_);
     EXPECT_TRUE(hm.Start());
     std::vector<std::string> hints = hm.GetHints();
     EXPECT_TRUE(hm.IsRunning());
@@ -396,9 +403,8 @@ TEST_F(HintManagerTest, GetHintsTest) {
 
 // Test GetHintStats
 TEST_F(HintManagerTest, GetHintStatsTest) {
-    auto hm =
-            std::make_unique<HintManager>(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(),
-                                          tag_adpfs_, std::optional<std::string>{});
+    auto hm = std::make_unique<HintManager>(
+            nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_, other_configs_);
     EXPECT_TRUE(InitHintStatus(hm));
     EXPECT_TRUE(hm->Start());
     HintStats launch_stats(hm->GetHintStats("LAUNCH"));
@@ -411,18 +417,20 @@ TEST_F(HintManagerTest, GetHintStatsTest) {
 
 // Test initialization of default values
 TEST_F(HintManagerTest, HintInitDefaultTest) {
-    HintManager hm(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_, {});
+    HintManager hm(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_,
+                   other_configs_);
     EXPECT_TRUE(hm.Start());
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
     EXPECT_TRUE(hm.IsRunning());
-    _VerifyPathValue(files_[0]->path, "");
-    _VerifyPathValue(files_[1]->path, "n1_value2");
-    _VerifyPropertyValue(prop_, "n2_value2");
+    VERIFY_PATH_VALUE(files_[0]->path, "");
+    VERIFY_PATH_VALUE(files_[1]->path, "n1_value2");
+    VERIFY_PROPERTY_VALUE(prop_, "n2_value2");
 }
 
 // Test IsHintSupported
 TEST_F(HintManagerTest, HintSupportedTest) {
-    HintManager hm(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_, {});
+    HintManager hm(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_,
+                   other_configs_);
     EXPECT_TRUE(hm.IsHintSupported("INTERACTION"));
     EXPECT_TRUE(hm.IsHintSupported("LAUNCH"));
     EXPECT_FALSE(hm.IsHintSupported("NO_SUCH_HINT"));
@@ -430,97 +438,95 @@ TEST_F(HintManagerTest, HintSupportedTest) {
 
 // Test hint/cancel/expire with dummy actions
 TEST_F(HintManagerTest, HintTest) {
-    auto hm =
-            std::make_unique<HintManager>(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(),
-                                          tag_adpfs_, std::optional<std::string>{});
+    auto hm = std::make_unique<HintManager>(
+            nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_, other_configs_);
     EXPECT_TRUE(InitHintStatus(hm));
     EXPECT_TRUE(hm->Start());
     EXPECT_TRUE(hm->IsRunning());
     EXPECT_TRUE(hm->DoHint("INTERACTION"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0]->path, "n0_value1");
-    _VerifyPathValue(files_[1]->path, "n1_value1");
-    _VerifyPropertyValue(prop_, "n2_value1");
+    VERIFY_PATH_VALUE(files_[0]->path, "n0_value1");
+    VERIFY_PATH_VALUE(files_[1]->path, "n1_value1");
+    VERIFY_PROPERTY_VALUE(prop_, "n2_value1");
     // this won't change the expire time of INTERACTION hint
     EXPECT_TRUE(hm->DoHint("INTERACTION", 200ms));
     // now place new hint
     EXPECT_TRUE(hm->DoHint("LAUNCH"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0]->path, "n0_value0");
-    _VerifyPathValue(files_[1]->path, "n1_value0");
-    _VerifyPropertyValue(prop_, "n2_value0");
+    VERIFY_PATH_VALUE(files_[0]->path, "n0_value0");
+    VERIFY_PATH_VALUE(files_[1]->path, "n1_value0");
+    VERIFY_PROPERTY_VALUE(prop_, "n2_value0");
     EXPECT_TRUE(hm->DoHint("LAUNCH", 500ms));
     // "LAUNCH" node1 not expired
     std::this_thread::sleep_for(400ms);
-    _VerifyPathValue(files_[0]->path, "n0_value0");
-    _VerifyPathValue(files_[1]->path, "n1_value0");
-    _VerifyPropertyValue(prop_, "n2_value0");
+    VERIFY_PATH_VALUE(files_[0]->path, "n0_value0");
+    VERIFY_PATH_VALUE(files_[1]->path, "n1_value0");
+    VERIFY_PROPERTY_VALUE(prop_, "n2_value0");
     // "LAUNCH" node1 expired
     std::this_thread::sleep_for(100ms + kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0]->path, "n0_value0");
-    _VerifyPathValue(files_[1]->path, "n1_value1");
-    _VerifyPropertyValue(prop_, "n2_value1");
+    VERIFY_PATH_VALUE(files_[0]->path, "n0_value0");
+    VERIFY_PATH_VALUE(files_[1]->path, "n1_value1");
+    VERIFY_PROPERTY_VALUE(prop_, "n2_value1");
     EXPECT_TRUE(hm->EndHint("LAUNCH"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
     // "LAUNCH" canceled
-    _VerifyPathValue(files_[0]->path, "n0_value1");
-    _VerifyPathValue(files_[1]->path, "n1_value1");
-    _VerifyPropertyValue(prop_, "n2_value1");
+    VERIFY_PATH_VALUE(files_[0]->path, "n0_value1");
+    VERIFY_PATH_VALUE(files_[1]->path, "n1_value1");
+    VERIFY_PROPERTY_VALUE(prop_, "n2_value1");
     std::this_thread::sleep_for(200ms);
     // "INTERACTION" node0 expired
-    _VerifyPathValue(files_[0]->path, "n0_value2");
-    _VerifyPathValue(files_[1]->path, "n1_value1");
-    _VerifyPropertyValue(prop_, "n2_value2");
+    VERIFY_PATH_VALUE(files_[0]->path, "n0_value2");
+    VERIFY_PATH_VALUE(files_[1]->path, "n1_value1");
+    VERIFY_PROPERTY_VALUE(prop_, "n2_value2");
     EXPECT_TRUE(hm->EndHint("INTERACTION"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
     // "INTERACTION" canceled
-    _VerifyPathValue(files_[0]->path, "n0_value2");
-    _VerifyPathValue(files_[1]->path, "n1_value2");
-    _VerifyPropertyValue(prop_, "n2_value2");
+    VERIFY_PATH_VALUE(files_[0]->path, "n0_value2");
+    VERIFY_PATH_VALUE(files_[1]->path, "n1_value2");
+    VERIFY_PROPERTY_VALUE(prop_, "n2_value2");
 }
 
 // Test collecting stats with simple actions
 TEST_F(HintManagerTest, HintStatsTest) {
-    auto hm =
-            std::make_unique<HintManager>(nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(),
-                                          tag_adpfs_, std::optional<std::string>{});
+    auto hm = std::make_unique<HintManager>(
+            nm_, actions_, std::vector<std::shared_ptr<AdpfConfig>>(), tag_adpfs_, other_configs_);
     EXPECT_TRUE(InitHintStatus(hm));
     EXPECT_TRUE(hm->Start());
     EXPECT_TRUE(hm->IsRunning());
     EXPECT_TRUE(hm->DoHint("INTERACTION"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0]->path, "n0_value1");
-    _VerifyPathValue(files_[1]->path, "n1_value1");
-    _VerifyPropertyValue(prop_, "n2_value1");
+    VERIFY_PATH_VALUE(files_[0]->path, "n0_value1");
+    VERIFY_PATH_VALUE(files_[1]->path, "n1_value1");
+    VERIFY_PROPERTY_VALUE(prop_, "n2_value1");
     // now place "LAUNCH" hint with timeout of 500ms
     EXPECT_TRUE(hm->DoHint("LAUNCH", 500ms));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0]->path, "n0_value0");
-    _VerifyPathValue(files_[1]->path, "n1_value0");
-    _VerifyPropertyValue(prop_, "n2_value0");
+    VERIFY_PATH_VALUE(files_[0]->path, "n0_value0");
+    VERIFY_PATH_VALUE(files_[1]->path, "n1_value0");
+    VERIFY_PROPERTY_VALUE(prop_, "n2_value0");
     // "LAUNCH" expired
     std::this_thread::sleep_for(500ms + kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0]->path, "n0_value1");
-    _VerifyPathValue(files_[1]->path, "n1_value1");
-    _VerifyPropertyValue(prop_, "n2_value1");
+    VERIFY_PATH_VALUE(files_[0]->path, "n0_value1");
+    VERIFY_PATH_VALUE(files_[1]->path, "n1_value1");
+    VERIFY_PROPERTY_VALUE(prop_, "n2_value1");
     HintStats launch_stats(hm->GetHintStats("LAUNCH"));
     // Since duration is recorded at the next DoHint,
     // duration should be 0.
-    _VerifyStats(launch_stats, 1, 0, 100);
+    VERIFY_STATS(launch_stats, 1, 0, 100);
     std::this_thread::sleep_for(100ms + kSLEEP_TOLERANCE_MS);
     EXPECT_TRUE(hm->EndHint("INTERACTION"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
     // "INTERACTION" canceled
-    _VerifyPathValue(files_[0]->path, "n0_value2");
-    _VerifyPathValue(files_[1]->path, "n1_value2");
-    _VerifyPropertyValue(prop_, "n2_value2");
+    VERIFY_PATH_VALUE(files_[0]->path, "n0_value2");
+    VERIFY_PATH_VALUE(files_[1]->path, "n1_value2");
+    VERIFY_PROPERTY_VALUE(prop_, "n2_value2");
     HintStats interaction_stats(hm->GetHintStats("INTERACTION"));
-    _VerifyStats(interaction_stats, 1, 800, 900);
+    VERIFY_STATS(interaction_stats, 1, 800, 900);
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
     // Second LAUNCH hint sent to get the first duration recorded.
     EXPECT_TRUE(hm->DoHint("LAUNCH"));
     launch_stats = hm->GetHintStats("LAUNCH");
-    _VerifyStats(launch_stats, 2, 500, 600);
+    VERIFY_STATS(launch_stats, 2, 500, 600);
 }
 
 // Test parsing nodes
@@ -529,8 +535,8 @@ TEST_F(HintManagerTest, ParseNodesTest) {
     EXPECT_EQ(4u, nodes.size());
     EXPECT_EQ("CPUCluster0MinFreq", nodes[0]->GetName());
     EXPECT_EQ("CPUCluster1MinFreq", nodes[1]->GetName());
-    EXPECT_EQ(files_[0 + 2]->path, nodes[0]->GetPath());
-    EXPECT_EQ(files_[1 + 2]->path, nodes[1]->GetPath());
+    EXPECT_THAT(nodes[0]->GetPaths(), testing::ElementsAre(files_[0 + 2]->path));
+    EXPECT_THAT(nodes[1]->GetPaths(), testing::ElementsAre(files_[1 + 2]->path));
     EXPECT_EQ("1512000", nodes[0]->GetValues()[0]);
     EXPECT_EQ("1134000", nodes[0]->GetValues()[1]);
     EXPECT_EQ("384000", nodes[0]->GetValues()[2]);
@@ -544,8 +550,10 @@ TEST_F(HintManagerTest, ParseNodesTest) {
     // no dynamic_cast intentionally in Android
     EXPECT_FALSE(reinterpret_cast<FileNode*>(nodes[0].get())->GetHoldFd());
     EXPECT_TRUE(reinterpret_cast<FileNode*>(nodes[1].get())->GetHoldFd());
+    EXPECT_FALSE(reinterpret_cast<FileNode*>(nodes[0].get())->GetAllowFailure());
+    EXPECT_TRUE(reinterpret_cast<FileNode*>(nodes[1].get())->GetAllowFailure());
     EXPECT_EQ("ModeProperty", nodes[2]->GetName());
-    EXPECT_EQ(prop_, nodes[2]->GetPath());
+    EXPECT_THAT(nodes[2]->GetPaths(), testing::ElementsAre(prop_));
     EXPECT_EQ("HIGH", nodes[2]->GetValues()[0]);
     EXPECT_EQ("LOW", nodes[2]->GetValues()[1]);
     EXPECT_EQ("NONE", nodes[2]->GetValues()[2]);
@@ -615,8 +623,8 @@ TEST_F(HintManagerTest, ParsePropertyNodesEmptyValueTest) {
     EXPECT_EQ(4u, nodes.size());
     EXPECT_EQ("CPUCluster0MinFreq", nodes[0]->GetName());
     EXPECT_EQ("CPUCluster1MinFreq", nodes[1]->GetName());
-    EXPECT_EQ(files_[0 + 2]->path, nodes[0]->GetPath());
-    EXPECT_EQ(files_[1 + 2]->path, nodes[1]->GetPath());
+    EXPECT_THAT(nodes[0]->GetPaths(), testing::ElementsAre(files_[0 + 2]->path));
+    EXPECT_THAT(nodes[1]->GetPaths(), testing::ElementsAre(files_[1 + 2]->path));
     EXPECT_EQ("1512000", nodes[0]->GetValues()[0]);
     EXPECT_EQ("1134000", nodes[0]->GetValues()[1]);
     EXPECT_EQ("384000", nodes[0]->GetValues()[2]);
@@ -630,8 +638,10 @@ TEST_F(HintManagerTest, ParsePropertyNodesEmptyValueTest) {
     // no dynamic_cast intentionally in Android
     EXPECT_FALSE(reinterpret_cast<FileNode*>(nodes[0].get())->GetHoldFd());
     EXPECT_TRUE(reinterpret_cast<FileNode*>(nodes[1].get())->GetHoldFd());
+    EXPECT_FALSE(reinterpret_cast<FileNode*>(nodes[0].get())->GetAllowFailure());
+    EXPECT_TRUE(reinterpret_cast<FileNode*>(nodes[1].get())->GetAllowFailure());
     EXPECT_EQ("ModeProperty", nodes[2]->GetName());
-    EXPECT_EQ(prop_, nodes[2]->GetPath());
+    EXPECT_THAT(nodes[2]->GetPaths(), testing::ElementsAre(prop_));
     EXPECT_EQ("HIGH", nodes[2]->GetValues()[0]);
     EXPECT_EQ("", nodes[2]->GetValues()[1]);
     EXPECT_EQ("NONE", nodes[2]->GetValues()[2]);
@@ -755,51 +765,51 @@ TEST_F(HintManagerTest, GetFromJSONTest) {
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
     EXPECT_TRUE(hm->IsRunning());
     // Initial default value on Node0
-    _VerifyPathValue(files_[0 + 2]->path, "384000");
-    _VerifyPathValue(files_[1 + 2]->path, "");
-    _VerifyPropertyValue(prop_, "");
+    VERIFY_PATH_VALUE(files_[0 + 2]->path, "384000");
+    VERIFY_PATH_VALUE(files_[1 + 2]->path, "");
+    VERIFY_PROPERTY_VALUE(prop_, "");
     // Do INTERACTION
     EXPECT_TRUE(hm->DoHint("INTERACTION"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0 + 2]->path, "384000");
-    _VerifyPathValue(files_[1 + 2]->path, "1134000");
-    _VerifyPropertyValue(prop_, "LOW");
+    VERIFY_PATH_VALUE(files_[0 + 2]->path, "384000");
+    VERIFY_PATH_VALUE(files_[1 + 2]->path, "1134000");
+    VERIFY_PROPERTY_VALUE(prop_, "LOW");
     // Do LAUNCH
-    _VerifyPropertyValue("vendor.pwhal.enable.test", "1");
+    VERIFY_PROPERTY_VALUE("vendor.pwhal.enable.test", "1");
     EXPECT_TRUE(hm->DoHint("LAUNCH"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0 + 2]->path, "1134000");
-    _VerifyPathValue(files_[1 + 2]->path, "1512000");
-    _VerifyPropertyValue(prop_, "HIGH");
+    VERIFY_PATH_VALUE(files_[0 + 2]->path, "1134000");
+    VERIFY_PATH_VALUE(files_[1 + 2]->path, "1512000");
+    VERIFY_PROPERTY_VALUE(prop_, "HIGH");
     std::this_thread::sleep_for(500ms);
     // "LAUNCH" node0 expired
-    _VerifyPathValue(files_[0 + 2]->path, "384000");
-    _VerifyPathValue(files_[1 + 2]->path, "1512000");
-    _VerifyPropertyValue(prop_, "LOW");
+    VERIFY_PATH_VALUE(files_[0 + 2]->path, "384000");
+    VERIFY_PATH_VALUE(files_[1 + 2]->path, "1512000");
+    VERIFY_PROPERTY_VALUE(prop_, "LOW");
     EXPECT_TRUE(hm->EndHint("LAUNCH"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
     // "LAUNCH" canceled
-    _VerifyPathValue(files_[0 + 2]->path, "384000");
-    _VerifyPathValue(files_[1 + 2]->path, "1134000");
-    _VerifyPropertyValue(prop_, "LOW");
+    VERIFY_PATH_VALUE(files_[0 + 2]->path, "384000");
+    VERIFY_PATH_VALUE(files_[1 + 2]->path, "1134000");
+    VERIFY_PROPERTY_VALUE(prop_, "LOW");
     std::this_thread::sleep_for(300ms);
     // "INTERACTION" node1 expired
-    _VerifyPathValue(files_[0 + 2]->path, "384000");
-    _VerifyPathValue(files_[1 + 2]->path, "384000");
-    _VerifyPropertyValue(prop_, "NONE");
+    VERIFY_PATH_VALUE(files_[0 + 2]->path, "384000");
+    VERIFY_PATH_VALUE(files_[1 + 2]->path, "384000");
+    VERIFY_PROPERTY_VALUE(prop_, "NONE");
 
     // Disable action[2] of LAUNCH
     EXPECT_TRUE(hm->EndHint("LAUNCH"));
-    _VerifyPropertyValue("vendor.pwhal.enable.test", "1");
+    VERIFY_PROPERTY_VALUE("vendor.pwhal.enable.test", "1");
     EXPECT_TRUE(hm->DoHint("DISABLE_LAUNCH_ACT2"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
-    _VerifyPropertyValue("vendor.pwhal.enable.test", "0");
+    VERIFY_PROPERTY_VALUE("vendor.pwhal.enable.test", "0");
     EXPECT_TRUE(hm->DoHint("LAUNCH"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0 + 2]->path, "1134000");
+    VERIFY_PATH_VALUE(files_[0 + 2]->path, "1134000");
     // action[2] have no effect.
-    _VerifyPathValue(files_[1 + 2]->path, "384000");
-    _VerifyPropertyValue(prop_, "HIGH");
+    VERIFY_PATH_VALUE(files_[1 + 2]->path, "384000");
+    VERIFY_PROPERTY_VALUE(prop_, "HIGH");
     EXPECT_TRUE(hm->EndHint("LAUNCH"));
     EXPECT_TRUE(hm->EndHint("DISABLE_LAUNCH_ACT2"));
 
@@ -807,31 +817,31 @@ TEST_F(HintManagerTest, GetFromJSONTest) {
     EXPECT_TRUE(hm->DoHint("MASK_LAUNCH_MODE"));
     EXPECT_FALSE(hm->DoHint("LAUNCH"));  // should fail
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0 + 2]->path, "384000");
-    _VerifyPathValue(files_[1 + 2]->path, "384000");
-    _VerifyPropertyValue(prop_, "NONE");
+    VERIFY_PATH_VALUE(files_[0 + 2]->path, "384000");
+    VERIFY_PATH_VALUE(files_[1 + 2]->path, "384000");
+    VERIFY_PROPERTY_VALUE(prop_, "NONE");
 
     // UnMask LAUNCH and do LAUNCH
     EXPECT_TRUE(hm->EndHint("MASK_LAUNCH_MODE"));
     EXPECT_TRUE(hm->DoHint("LAUNCH"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0 + 2]->path, "1134000");
-    _VerifyPathValue(files_[1 + 2]->path, "1512000");
-    _VerifyPropertyValue(prop_, "HIGH");
+    VERIFY_PATH_VALUE(files_[0 + 2]->path, "1134000");
+    VERIFY_PATH_VALUE(files_[1 + 2]->path, "1512000");
+    VERIFY_PROPERTY_VALUE(prop_, "HIGH");
     // END_LAUNCH_MODE should deactivate LAUNCH
     EXPECT_TRUE(hm->DoHint("END_LAUNCH_MODE"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0 + 2]->path, "384000");
-    _VerifyPathValue(files_[1 + 2]->path, "384000");
-    _VerifyPropertyValue(prop_, "NONE");
+    VERIFY_PATH_VALUE(files_[0 + 2]->path, "384000");
+    VERIFY_PATH_VALUE(files_[1 + 2]->path, "384000");
+    VERIFY_PROPERTY_VALUE(prop_, "NONE");
     EXPECT_TRUE(hm->EndHint("END_LAUNCH_MODE"));
 
     // DO_LAUNCH_MODE should activate LAUNCH
     EXPECT_TRUE(hm->DoHint("DO_LAUNCH_MODE"));
     std::this_thread::sleep_for(kSLEEP_TOLERANCE_MS);
-    _VerifyPathValue(files_[0 + 2]->path, "1134000");
-    _VerifyPathValue(files_[1 + 2]->path, "1512000");
-    _VerifyPropertyValue(prop_, "HIGH");
+    VERIFY_PATH_VALUE(files_[0 + 2]->path, "1134000");
+    VERIFY_PATH_VALUE(files_[1 + 2]->path, "1512000");
+    VERIFY_PROPERTY_VALUE(prop_, "HIGH");
 
     // Mask LAUNCH
     EXPECT_TRUE(hm->DoHint("MASK_LAUNCH_MODE"));
@@ -1133,6 +1143,29 @@ TEST_F(HintManagerTest, GpuConfigSupport) {
     EXPECT_FALSE(profile->mGpuBoostOn);
     EXPECT_FALSE(profile->mGpuBoostCapacityMax);
     EXPECT_EQ(profile->mGpuCapacityLoadUpHeadroom, 0);
+}
+
+TEST_F(HintManagerTest, OtherConfigs) {
+    // With other configurations
+    TemporaryFile json_file;
+    ASSERT_TRUE(android::base::WriteStringToFile(kJSON_ADPF, json_file.path)) << strerror(errno);
+    HintManager *hm = HintManager::GetFromJSON(json_file.path, false);
+    ASSERT_TRUE(hm);
+
+    auto other_configs = hm->GetOtherConfigs();
+    EXPECT_EQ(other_configs.GPUSysfsPath, "/sys/devices/platform/123.abc");
+    EXPECT_TRUE(other_configs.enableMetricCollection);
+    EXPECT_EQ(other_configs.maxNumOfCachedSessionMetrics, 100);
+
+    // Without other configurations
+    ASSERT_TRUE(android::base::WriteStringToFile(kJSON_RAW, json_file.path)) << strerror(errno);
+    hm = HintManager::GetFromJSON(json_file.path, false);
+    ASSERT_TRUE(hm);
+
+    other_configs = hm->GetOtherConfigs();
+    EXPECT_EQ(other_configs.GPUSysfsPath, std::nullopt);
+    EXPECT_EQ(other_configs.enableMetricCollection, std::nullopt);
+    EXPECT_EQ(other_configs.maxNumOfCachedSessionMetrics, std::nullopt);
 }
 
 }  // namespace perfmgr

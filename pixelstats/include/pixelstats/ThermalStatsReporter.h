@@ -19,6 +19,7 @@
 
 #include <aidl/android/frameworks/stats/IStats.h>
 #include <hardware/google/pixel/pixelstats/pixelatoms.pb.h>
+#include <json/reader.h>
 
 #include <string>
 
@@ -35,9 +36,10 @@ using aidl::android::frameworks::stats::VendorAtomValue;
  */
 class ThermalStatsReporter {
   public:
-    ThermalStatsReporter();
-    void logThermalStats(const std::shared_ptr<IStats> &stats_client,
-                         const std::vector<std::string> &thermal_stats_paths);
+    ThermalStatsReporter(const Json::Value &configData);
+    void logThermalDfsStats(const std::shared_ptr<IStats> &stats_client,
+                            const std::vector<std::string> &thermal_stats_paths);
+    void logTjTripCountStats(const std::shared_ptr<IStats> &stats_client);
 
   private:
     struct ThermalDfsCounts {
@@ -49,18 +51,35 @@ class ThermalStatsReporter {
         int64_t aur_count;
     };
 
+    struct TripCountConfig {
+        std::vector<int> trip_numbers;
+        std::vector<int64_t> prev_trip_counts;
+        std::string read_path;
+        std::string reset_path;
+    };
+
     // Proto messages are 1-indexed and VendorAtom field numbers start at 2, so
     // store everything in the values array at the index of the field number
     // -2.
     const int kVendorAtomOffset = 2;
     const int kNumOfThermalDfsStats = 6;
-    struct ThermalDfsCounts prev_data;
+    const int kMaxTripNumber = 8;
+    const std::unordered_map<std::string, PixelAtoms::TjThermalZone> kThermalZoneStrToEnum{
+            {"BIG", PixelAtoms::BIG}, {"BIG_MID", PixelAtoms::BIG_MID},
+            {"MID", PixelAtoms::MID}, {"LITTLE", PixelAtoms::LITTLE},
+            {"GPU", PixelAtoms::GPU}, {"TPU", PixelAtoms::TPU},
+            {"AUR", PixelAtoms::AUR}, {"ISP", PixelAtoms::ISP},
+            {"MEM", PixelAtoms::MEM}, {"AOC", PixelAtoms::AOC}};
 
-    void logThermalDfsStats(const std::shared_ptr<IStats> &stats_client,
-                            const std::vector<std::string> &thermal_stats_paths);
+    struct ThermalDfsCounts prev_data;
+    // Map of Tj thermal zone to the trip count config.
+    std::unordered_map<PixelAtoms::TjThermalZone, TripCountConfig> tz_trip_count_config_;
+
     bool captureThermalDfsStats(const std::vector<std::string> &thermal_stats_paths,
                                 struct ThermalDfsCounts *cur_data);
     bool readDfsCount(const std::string &path, int64_t *val);
+    bool readAllTripCount(const std::string &path, std::vector<int64_t> *vals);
+    void parseThermalTjTripCounterConfig(const Json::Value &configData);
 };
 
 }  // namespace pixel

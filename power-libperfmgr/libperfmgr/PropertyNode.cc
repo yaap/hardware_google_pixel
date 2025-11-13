@@ -29,11 +29,11 @@
 namespace android {
 namespace perfmgr {
 
-PropertyNode::PropertyNode(std::string name, std::string node_path,
-                           std::vector<RequestGroup> req_sorted,
-                           std::size_t default_val_index, bool reset_on_init)
-    : Node(std::move(name), std::move(node_path), std::move(req_sorted),
-           default_val_index, reset_on_init) {}
+PropertyNode::PropertyNode(std::string name, std::vector<std::string> node_paths,
+                           std::vector<RequestGroup> req_sorted, std::size_t default_val_index,
+                           bool reset_on_init)
+    : Node(std::move(name), std::move(node_paths), std::move(req_sorted), default_val_index,
+           reset_on_init) {}
 
 std::chrono::milliseconds PropertyNode::Update(bool) {
     std::size_t value_index = default_val_index_;
@@ -51,20 +51,25 @@ std::chrono::milliseconds PropertyNode::Update(bool) {
     if (value_index != current_val_index_ || reset_on_init_) {
         const std::string& req_value =
             req_sorted_[value_index].GetRequestValue();
+
         if (ATRACE_ENABLED()) {
             ATRACE_INT(("N:" + GetName()).c_str(), value_index);
             const std::string tag =
                     GetName() + ":" + req_value + ":" + std::to_string(expire_time.count());
             ATRACE_BEGIN(tag.c_str());
         }
-        if (!android::base::SetProperty(node_path_, req_value)) {
-            LOG(WARNING) << "Failed to set property to : " << node_path_
-                         << " with value: " << req_value;
-        } else {
-            // Update current index only when succeed
-            current_val_index_ = value_index;
-            reset_on_init_ = false;
+
+        for (const auto &path : node_paths_) {
+            if (!android::base::SetProperty(path, req_value)) {
+                LOG(WARNING) << "Failed to set property to : " << path
+                            << " with value: " << req_value;
+            } else {
+                // Update current index only when succeed
+                current_val_index_ = value_index;
+                reset_on_init_ = false;
+            }
         }
+
         if (ATRACE_ENABLED()) {
             ATRACE_END();
         }
@@ -73,14 +78,13 @@ std::chrono::milliseconds PropertyNode::Update(bool) {
 }
 
 void PropertyNode::DumpToFd(int fd) const {
-    std::string node_value = android::base::GetProperty(node_path_, "");
-    std::string buf(android::base::StringPrintf(
-            "Node Name\t"
-            "Property Name\t"
-            "Current Index\t"
-            "Current Value\n"
-            "%s\t%s\t%zu\t%s\n",
-            name_.c_str(), node_path_.c_str(), current_val_index_, node_value.c_str()));
+    std::string buf("Node Name\tProperty Name\tCurrent Index\tCurrent Value\n");
+
+    for (const auto &path : node_paths_) {
+        std::string node_value = android::base::GetProperty(path, "");
+        buf += android::base::StringPrintf("%s\t%s\t%zu\t%s\n", name_.c_str(), path.c_str(), current_val_index_, node_value.c_str());
+    }
+
     if (!android::base::WriteStringToFd(buf, fd)) {
         LOG(ERROR) << "Failed to dump fd: " << fd;
     }

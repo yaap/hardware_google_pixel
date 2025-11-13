@@ -20,7 +20,7 @@ cc_binary {
     ],
     vendor: true,
     relative_install_path: "hw",
-    vintf_fragments: [
+    vintf_fragment_modules: [
         "android.hardware.thermal-service.pixel.xml",
     ],
     init_rc: [
@@ -63,6 +63,12 @@ cc_binary {
         "clang-analyzer-security*",
         "cert-*",
     ],
+}
+
+vintf_fragment {
+    name: "android.hardware.thermal-service.pixel.xml",
+    src: "android.hardware.thermal-service.pixel.xml",
+    vendor: true,
 }
 
 cc_test {

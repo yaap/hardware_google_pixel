@@ -29,9 +29,11 @@ namespace perfmgr {
 // EventNode represents to handle events by callback function.
 class EventNode : public Node {
   public:
-    EventNode(std::string name, std::string node_path, std::vector<RequestGroup> req_sorted,
-              std::size_t default_val_index, bool reset_on_init,
-              std::function<void(const std::string &, const std::string &, const std::string &)>
+    EventNode(std::string name, std::vector<std::string> node_paths,
+              std::vector<RequestGroup> req_sorted, std::size_t default_val_index,
+              bool reset_on_init,
+              std::function<void(const std::string &, const std::vector<std::string> &,
+                                 const std::string &)>
                       update_callback);
 
     std::chrono::milliseconds Update(bool log_error) override;
@@ -40,7 +42,7 @@ class EventNode : public Node {
   private:
     EventNode(const Node &other) = delete;
     EventNode &operator=(Node const &) = delete;
-    const std::function<void(const std::string &name, const std::string &path,
+    const std::function<void(const std::string &name, const std::vector<std::string> &paths,
                              const std::string &value)>
             update_callback_;
 };

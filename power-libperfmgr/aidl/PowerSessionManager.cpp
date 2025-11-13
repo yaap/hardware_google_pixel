@@ -30,6 +30,7 @@
 #include "AppDescriptorTrace.h"
 #include "AppHintDesc.h"
 #include "tests/mocks/MockHintManager.h"
+#include "utils/ThermalStateListener.h"
 
 namespace aidl {
 namespace google {
@@ -40,6 +41,9 @@ namespace pixel {
 
 constexpr char kGameModeName[] = "GAME";
 constexpr int32_t kBGRampupVal = 1;
+// The frame number threshold to decide whether upload a metric session.
+// It's intended to avoid uploading the metric session with just few frames.
+static constexpr int32_t kNumOfFramesThreshold = 20;
 
 namespace {
 /* there is no glibc or bionic wrapper */
@@ -98,7 +102,7 @@ bool PowerSessionManager<HintManagerT>::getGameModeEnableState() {
 template <class HintManagerT>
 void PowerSessionManager<HintManagerT>::addPowerSession(
         const std::string &idString, const std::shared_ptr<AppHintDesc> &sessionDescriptor,
-        const std::shared_ptr<AppDescriptorTrace> &sessionTrace,
+        const std::shared_ptr<AppDescriptorTrace> &sessionTrace, const bool enableMetricCollection,
         const std::vector<int32_t> &threadIds) {
     if (!sessionDescriptor) {
         ALOGE("sessionDescriptor is null. PowerSessionManager failed to add power session: %s",
@@ -120,6 +124,18 @@ void PowerSessionManager<HintManagerT>::addPowerSession(
     sve.votes->add(
             static_cast<std::underlying_type_t<AdpfVoteType>>(AdpfVoteType::CPU_VOTE_DEFAULT),
             CpuVote(false, timeNow, sessionDescriptor->targetNs, kUclampMin, kUclampMax));
+
+    if (enableMetricCollection) {
+        SessionMetrics sessMetr;
+        sessMetr.uid = sessionDescriptor->uid;
+        sessMetr.metricStartTime = std::chrono::system_clock::now();
+        sessMetr.thermalThrotStat = ThermalStateListener::getInstance()->getThermalThrotSev();
+        if (sessionDescriptor->tag == SessionTag::SURFACEFLINGER) {
+            sessMetr.frameTimelineType = FrameTimelineType::SURFACEFLINGER;
+            sessMetr.scenarioType = mGameModeEnabled ? ScenarioType::GAME : ScenarioType::DEFAULT;
+        }
+        sve.sessFrameMetrics = sessMetr;
+    }
 
     bool addedRes = false;
     {
@@ -148,6 +164,18 @@ void PowerSessionManager<HintManagerT>::removePowerSession(int64_t sessionId) {
         // Wait till end to remove session because it needs to be around for apply U clamp
         // to work above since applying the uclamp needs a valid session id
         std::lock_guard<std::mutex> lock(mSessionTaskMapMutex);
+
+        // collect the session metric before close the session
+        auto sessValPtr = mSessionTaskMap.findSession(sessionId);
+        if (sessValPtr->sessFrameMetrics) {
+            sessValPtr->sessFrameMetrics.value().metricEndTime = std::chrono::system_clock::now();
+            sessValPtr->sessFrameMetrics.value().metricSessionCompleted = true;
+            if (sessValPtr->sessFrameMetrics.value().totalFrameNumber >= kNumOfFramesThreshold &&
+                mCollectedSessionMetrics.size() < kMaxNumOfCachedSessionMetrics) {
+                mCollectedSessionMetrics.push_back(sessValPtr->sessFrameMetrics.value());
+            }
+        }
+
         mSessionTaskMap.replace(sessionId, {}, &addedThreads, &removedThreads);
         mSessionTaskMap.remove(sessionId);
     }
@@ -189,7 +217,7 @@ void PowerSessionManager<HintManagerT>::setThreadsFromPowerSession(
 }
 
 template <class HintManagerT>
-std::optional<bool> PowerSessionManager<HintManagerT>::isAnyAppSessionActive() {
+bool PowerSessionManager<HintManagerT>::isAnyAppSessionActive() {
     bool isAnyAppSessionActive = false;
     {
         std::lock_guard<std::mutex> lock(mSessionTaskMapMutex);
@@ -197,6 +225,16 @@ std::optional<bool> PowerSessionManager<HintManagerT>::isAnyAppSessionActive() {
                 mSessionTaskMap.isAnyAppSessionActive(std::chrono::steady_clock::now());
     }
     return isAnyAppSessionActive;
+}
+
+template <class HintManagerT>
+bool PowerSessionManager<HintManagerT>::areAllSessionsTimeout() {
+    bool areAllTimeout = false;
+    {
+        std::lock_guard<std::mutex> lock(mSessionTaskMapMutex);
+        areAllTimeout = mSessionTaskMap.areAllSessionsTimeout(std::chrono::steady_clock::now());
+    }
+    return areAllTimeout;
 }
 
 template <class HintManagerT>
@@ -224,6 +262,20 @@ void PowerSessionManager<HintManagerT>::dumpToFd(int fd) {
                 dump_buf << "]\n";
             });
     dump_buf << "========== End PowerSessionManager ADPF list ==========\n";
+
+    dump_buf << "========== Begin power session metrics list ==========\n";
+    dump_buf << "--- Ongoing sessions' metrics ---\n";
+    mSessionTaskMap.forEachSessionValTasks(
+            [&](auto /* sessionId */, const auto &sessionVal, const auto & /* tasks */) {
+                if (sessionVal.sessFrameMetrics) {
+                    sessionVal.sessFrameMetrics.value().dump(dump_buf);
+                }
+            });
+    dump_buf << "\n--- Cached sessions' metrics ---\n";
+    for (const auto &met : mCollectedSessionMetrics) {
+        met.dump(dump_buf);
+    }
+    dump_buf << "========== End power session metrics list ==========\n";
     if (!::android::base::WriteStringToFd(dump_buf.str(), fd)) {
         ALOGE("Failed to dump one of session list to fd:%d", fd);
     }
@@ -250,6 +302,19 @@ void PowerSessionManager<HintManagerT>::pause(int64_t sessionId) {
             // default low value when session gets paused.
             voteRampupBoostLocked(sessionId, false, kBGRampupVal, kBGRampupVal);
         }
+
+        // collect the session metric
+        if (sessValPtr->sessFrameMetrics) {
+            sessValPtr->sessFrameMetrics.value().metricEndTime = std::chrono::system_clock::now();
+            sessValPtr->sessFrameMetrics.value().metricSessionCompleted = true;
+            if (sessValPtr->sessFrameMetrics.value().totalFrameNumber >= kNumOfFramesThreshold &&
+                mCollectedSessionMetrics.size() < kMaxNumOfCachedSessionMetrics) {
+                mCollectedSessionMetrics.push_back(sessValPtr->sessFrameMetrics.value());
+            }
+            sessValPtr->sessFrameMetrics.value().resetMetric(
+                    ThermalStateListener::getInstance()->getThermalThrotSev(),
+                    mGameModeEnabled ? ScenarioType::GAME : ScenarioType::DEFAULT);
+        }
     }
     applyCpuAndGpuVotes(sessionId, std::chrono::steady_clock::now());
 }
@@ -269,6 +334,11 @@ void PowerSessionManager<HintManagerT>::resume(int64_t sessionId) {
             return;
         }
         sessValPtr->isActive = true;
+        if (sessValPtr->sessFrameMetrics) {
+            sessValPtr->sessFrameMetrics.value().resetMetric(
+                    ThermalStateListener::getInstance()->getThermalThrotSev(),
+                    mGameModeEnabled ? ScenarioType::GAME : ScenarioType::DEFAULT);
+        }
     }
     applyCpuAndGpuVotes(sessionId, std::chrono::steady_clock::now());
 }
@@ -572,15 +642,29 @@ void PowerSessionManager<HintManagerT>::clear() {
 }
 
 template <class HintManagerT>
-void PowerSessionManager<HintManagerT>::updateFrameBuckets(int64_t sessionId,
-                                                           const FrameBuckets &lastReportedFrames) {
+void PowerSessionManager<HintManagerT>::updateFrameMetrics(
+        int64_t sessionId, const FrameTimingMetrics &lastReportedFrames) {
     std::lock_guard<std::mutex> lock(mSessionTaskMapMutex);
     auto sessValPtr = mSessionTaskMap.findSession(sessionId);
     if (nullptr == sessValPtr) {
         return;
     }
 
-    sessValPtr->sessFrameBuckets.addUpNewFrames(lastReportedFrames);
+    sessValPtr->sessFrameBuckets.addUpNewFrames(lastReportedFrames.framesInBuckets);
+    if (sessValPtr->sessFrameMetrics) {
+        switch (sessValPtr->sessFrameMetrics.value().scenarioType) {
+            case ScenarioType::GAME:
+                sessValPtr->sessFrameMetrics.value().addNewFrames(
+                        lastReportedFrames.gameFrameMetrics);
+                break;
+            case ScenarioType::DEFAULT:
+                sessValPtr->sessFrameMetrics.value().addNewFrames(
+                        lastReportedFrames.framesInBuckets);
+                break;
+            default:
+                ALOGW("Unknown scenarioType during updateFrameMetrics.");
+        }
+    }
 }
 
 template <class HintManagerT>
@@ -705,6 +789,41 @@ void PowerSessionManager<HintManagerT>::updateRampupBoostMode(int64_t sessionId,
         voteRampupBoostLocked(sessionId, sessValPtr->rampupBoostActive, defaultRampupVal,
                               highRampupVal);
     }
+}
+
+template <class HintManagerT>
+bool PowerSessionManager<HintManagerT>::updateCollectedSessionMetrics(int64_t sessionId) {
+    std::lock_guard<std::mutex> lock(mSessionTaskMapMutex);
+    auto sessValPtr = mSessionTaskMap.findSession(sessionId);
+    if (nullptr == sessValPtr || !sessValPtr->sessFrameMetrics) {
+        return false;
+    }
+
+    bool needNewMetricSession = false;
+    auto newScenarioType = mGameModeEnabled ? ScenarioType::GAME : ScenarioType::DEFAULT;
+    if (sessValPtr->tag == SessionTag::SURFACEFLINGER) {
+        if (sessValPtr->sessFrameMetrics.value().scenarioType != newScenarioType) {
+            needNewMetricSession = true;
+        }
+    }
+
+    auto newThermalThrotSev = ThermalStateListener::getInstance()->getThermalThrotSev();
+    if (sessValPtr->sessFrameMetrics.value().thermalThrotStat != newThermalThrotSev) {
+        needNewMetricSession = true;
+    }
+
+    if (needNewMetricSession) {
+        sessValPtr->sessFrameMetrics.value().metricEndTime = std::chrono::system_clock::now();
+        sessValPtr->sessFrameMetrics.value().metricSessionCompleted = true;
+        if (sessValPtr->sessFrameMetrics.value().totalFrameNumber >= kNumOfFramesThreshold &&
+            mCollectedSessionMetrics.size() < kMaxNumOfCachedSessionMetrics) {
+            mCollectedSessionMetrics.push_back(sessValPtr->sessFrameMetrics.value());
+        }
+        sessValPtr->sessFrameMetrics.value().resetMetric(newThermalThrotSev, newScenarioType);
+        return true;
+    }
+
+    return false;
 }
 
 template class PowerSessionManager<>;

@@ -159,7 +159,6 @@ cc_library {
         "BatteryFGReporter.cpp",
         "BatteryFwUpdateReporter.cpp",
         "BatteryTTFReporter.cpp",
-        "BrownoutDetectedReporter.cpp",
         "ChargeStatsReporter.cpp",
         "DisplayStatsReporter.cpp",
         "DropDetect.cpp",

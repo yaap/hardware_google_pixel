@@ -26,11 +26,10 @@
 namespace android {
 namespace perfmgr {
 
-Node::Node(std::string name, std::string node_path,
-           std::vector<RequestGroup> req_sorted, std::size_t default_val_index,
-           bool reset_on_init)
+Node::Node(std::string name, std::vector<std::string> node_paths,
+           std::vector<RequestGroup> req_sorted, std::size_t default_val_index, bool reset_on_init)
     : name_(std::move(name)),
-      node_path_(std::move(node_path)),
+      node_paths_(std::move(node_paths)),
       req_sorted_(std::move(req_sorted)),
       default_val_index_(default_val_index),
       reset_on_init_(reset_on_init),
@@ -61,8 +60,8 @@ const std::string& Node::GetName() const {
     return name_;
 }
 
-const std::string& Node::GetPath() const {
-    return node_path_;
+const std::vector<std::string> &Node::GetPaths() const {
+    return node_paths_;
 }
 
 bool Node::GetValueIndex(const std::string& value, std::size_t* index) const {

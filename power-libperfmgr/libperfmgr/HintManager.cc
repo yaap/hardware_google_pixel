@@ -303,7 +303,30 @@ void HintManager::DumpToFd(int fd) {
             LOG(ERROR) << "Failed to dump fd: " << fd;
         }
     }
+
+    DumpOtherConfigs(fd);
     fsync(fd);
+}
+
+void HintManager::DumpOtherConfigs(int fd) {
+    std::ostringstream dumpBuf;
+    dumpBuf << "========== Other configurations begin ==========\n";
+    if (other_configs_.GPUSysfsPath) {
+        dumpBuf << "GPUSysfsPath: " << other_configs_.GPUSysfsPath.value() << "\n";
+    }
+    if (other_configs_.enableMetricCollection) {
+        dumpBuf << "EnableMetricCollection: " << other_configs_.enableMetricCollection.value()
+                << "\n";
+    }
+    if (other_configs_.maxNumOfCachedSessionMetrics) {
+        dumpBuf << "MaxNumOfCachedSessionMetrics: "
+                << other_configs_.maxNumOfCachedSessionMetrics.value() << "\n";
+    }
+    dumpBuf << "========== Other configurations end ==========\n";
+
+    if (!android::base::WriteStringToFd(dumpBuf.str(), fd)) {
+        LOG(ERROR) << "Failed to dump fd: " << fd;
+    }
 }
 
 bool HintManager::Start() {
@@ -336,20 +359,42 @@ HintManager *HintManager::GetInstance() {
     return sInstance.get();
 }
 
-static std::optional<std::string> ParseGpuSysfsNode(const std::string &json_doc) {
+OtherConfigs HintManager::ParseOtherConfigs(const std::string &json_doc) {
+    OtherConfigs otherConf;
     Json::Value root;
     Json::CharReaderBuilder builder;
     std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
     std::string errorMessage;
     if (!reader->parse(&*json_doc.begin(), &*json_doc.end(), &root, &errorMessage)) {
         LOG(ERROR) << "Failed to parse JSON config: " << errorMessage;
-        return {};
+        return otherConf;
     }
 
-    if (root["GpuSysfsPath"].empty() || !root["GpuSysfsPath"].isString()) {
-        return {};
+    // TODO(guibing@): Remove this part after all the powerhint configurations moved its position
+    // under "OtherConfigs". Keep it now for compatibility with existing powerhint json files.
+    if (!root["GpuSysfsPath"].empty() && root["GpuSysfsPath"].isString()) {
+        otherConf.GPUSysfsPath = root["GpuSysfsPath"].asString();
     }
-    return {root["GpuSysfsPath"].asString()};
+
+    if (root["OtherConfigs"].empty()) {
+        return otherConf;
+    }
+
+    // Parse other configurations
+    Json::Value extraOtherConf = root["OtherConfigs"];
+    if (!extraOtherConf["EnableMetricCollection"].empty() &&
+        extraOtherConf["EnableMetricCollection"].isBool()) {
+        otherConf.enableMetricCollection = extraOtherConf["EnableMetricCollection"].asBool();
+    }
+    if (!extraOtherConf["MaxNumOfCachedSessionMetrics"].empty() &&
+        extraOtherConf["MaxNumOfCachedSessionMetrics"].isUInt()) {
+        otherConf.maxNumOfCachedSessionMetrics =
+                extraOtherConf["MaxNumOfCachedSessionMetrics"].asUInt();
+    }
+    if (!extraOtherConf["GpuSysfsPath"].empty() && extraOtherConf["GpuSysfsPath"].isString()) {
+        otherConf.GPUSysfsPath = extraOtherConf["GpuSysfsPath"].asString();
+    }
+    return otherConf;
 }
 
 HintManager *HintManager::GetFromJSON(const std::string &config_path, bool start) {
@@ -377,23 +422,26 @@ HintManager *HintManager::GetFromJSON(const std::string &config_path, bool start
     LOG(VERBOSE) << "Parse ADPF Hint Event Table from all nodes.";
     for (std::size_t i = 0; i < nodes.size(); ++i) {
         const std::string &node_name = nodes[i]->GetName();
-        const std::string &node_path = nodes[i]->GetPath();
-        if (node_path.starts_with(kAdpfEventNodePath)) {
-            std::string tag = node_path.substr(strlen(kAdpfEventNodePath));
-            std::size_t index = nodes[i]->GetDefaultIndex();
-            std::string profile_name = nodes[i]->GetValues()[index];
-            for (std::size_t j = 0; j < adpfs.size(); ++j) {
-                if (adpfs[j]->mName == profile_name) {
-                    tag_adpfs[tag] = adpfs[j];
-                    LOG(INFO) << "[" << tag << ":" << node_name << "] set to '" << profile_name
-                              << "'";
-                    break;
+        const std::vector<std::string> &node_paths = nodes[i]->GetPaths();
+
+        for (auto &path: node_paths){
+            if (path.starts_with(kAdpfEventNodePath)) {
+                std::string tag = path.substr(strlen(kAdpfEventNodePath));
+                std::size_t index = nodes[i]->GetDefaultIndex();
+                std::string profile_name = nodes[i]->GetValues()[index];
+                for (std::size_t j = 0; j < adpfs.size(); ++j) {
+                    if (adpfs[j]->mName == profile_name) {
+                        tag_adpfs[tag] = adpfs[j];
+                        LOG(INFO) << "[" << tag << ":" << node_name << "] set to '" << profile_name
+                                << "'";
+                        break;
+                    }
                 }
-            }
-            if (!tag_adpfs[tag]) {
-                tag_adpfs[tag] = adpfs[0];
-                LOG(INFO) << "[" << tag << ":" << node_name << "] fallback to '" << adpfs[0]->mName
-                          << "'";
+                if (!tag_adpfs[tag]) {
+                    tag_adpfs[tag] = adpfs[0];
+                    LOG(INFO) << "[" << tag << ":" << node_name << "] fallback to '" << adpfs[0]->mName
+                            << "'";
+                }
             }
         }
     }
@@ -403,11 +451,11 @@ HintManager *HintManager::GetFromJSON(const std::string &config_path, bool start
         return nullptr;
     }
 
-    auto const gpu_sysfs_node = ParseGpuSysfsNode(json_doc);
+    auto const other_configs = ParseOtherConfigs(json_doc);
 
     sp<NodeLooperThread> nm = new NodeLooperThread(std::move(nodes));
     sInstance =
-            std::make_unique<HintManager>(std::move(nm), actions, adpfs, tag_adpfs, gpu_sysfs_node);
+            std::make_unique<HintManager>(std::move(nm), actions, adpfs, tag_adpfs, other_configs);
 
     if (!HintManager::InitHintStatus(sInstance)) {
         LOG(ERROR) << "Failed to initialize hint status";
@@ -456,20 +504,46 @@ std::vector<std::unique_ptr<Node>> HintManager::ParseNodes(const std::string &js
             return nodes_parsed;
         }
 
+        std::vector<std::string> paths_parsed;
         std::string path = nodes[i]["Path"].asString();
-        LOG(VERBOSE) << "Node[" << i << "]'s Path: " << path;
-        if (path.empty()) {
-            LOG(ERROR) << "Failed to read "
-                       << "Node[" << i << "]'s Path";
-            nodes_parsed.clear();
-            return nodes_parsed;
+
+        if (!path.empty()) {
+            LOG(WARNING) << "In node" << name << " old node path format detected.";
+            auto result = nodes_path_parsed.insert(path);
+            if (!result.second) {
+                LOG(ERROR) << "Duplicate Node[" << i << "]'s Paths";
+                nodes_parsed.clear();
+                return nodes_parsed;
+            }
+            paths_parsed.push_back(path);
         }
 
-        result = nodes_path_parsed.insert(path);
-        if (!result.second) {
-            LOG(ERROR) << "Duplicate Node[" << i << "]'s Path";
-            nodes_parsed.clear();
-            return nodes_parsed;
+        Json::Value paths = nodes[i]["Paths"];
+
+        if (paths.empty()) {
+            LOG(ERROR) << "Failed to read "
+                       << "Node[" << i << "]'s Paths";
+            if (paths_parsed.empty()) {
+                nodes_parsed.clear();
+                return nodes_parsed;
+            }
+        }
+
+        for (Json::Value::ArrayIndex j = 0; j < paths.size(); ++j) {
+            path = paths[j].asString();
+            if (path.empty()) {
+                LOG(ERROR) << "Failed to read "
+                           << "Node[" << i << "]'s Paths";
+                nodes_parsed.clear();
+                return nodes_parsed;
+            }
+            auto result = nodes_path_parsed.insert(path);
+            if (!result.second) {
+                LOG(ERROR) << "Duplicate Node[" << i << "]'s Paths";
+                nodes_parsed.clear();
+                return nodes_parsed;
+            }
+            paths_parsed.push_back(path);
         }
 
         bool is_event_node = false;
@@ -551,13 +625,13 @@ std::vector<std::unique_ptr<Node>> HintManager::ParseNodes(const std::string &js
                      << reset << std::noboolalpha;
 
         if (is_event_node) {
-            auto update_callback = [](const std::string &name, const std::string &path,
+            auto update_callback = [](const std::string &name, const std::vector<std::string> &path,
                                       const std::string &val) {
                 HintManager::GetInstance()->OnNodeUpdate(name, path, val);
             };
             nodes_parsed.emplace_back(std::make_unique<EventNode>(
-                    name, path, values_parsed, static_cast<std::size_t>(default_index), reset,
-                    update_callback));
+                    name, paths_parsed, values_parsed, static_cast<std::size_t>(default_index),
+                    reset, update_callback));
         } else if (is_file) {
             bool truncate = android::base::GetBoolProperty(kPowerHalTruncateProp, true);
             if (nodes[i]["Truncate"].empty() || !nodes[i]["Truncate"].isBool()) {
@@ -588,12 +662,23 @@ std::vector<std::unique_ptr<Node>> HintManager::ParseNodes(const std::string &js
             LOG(VERBOSE) << "Node[" << i << "]'s WriteOnly: " << std::boolalpha
                          << write_only << std::noboolalpha;
 
+            bool allow_failure = false;
+            if (nodes[i]["AllowFailure"].empty() || !nodes[i]["AllowFailure"].isBool()) {
+                LOG(INFO) << "Failed to read Node[" << i
+                        << "]'s AllowFailure, set to 'false'";
+            } else {
+                allow_failure = nodes[i]["AllowFailure"].asBool();
+            }
+            LOG(VERBOSE) << "Node[" << i << "]'s AllowFailure: " << std::boolalpha
+                         << allow_failure << std::noboolalpha;
+
             nodes_parsed.emplace_back(std::make_unique<FileNode>(
-                    name, path, values_parsed, static_cast<std::size_t>(default_index), reset,
-                    truncate, hold_fd, write_only));
+                    name, paths_parsed, values_parsed, static_cast<std::size_t>(default_index),
+                    reset, truncate, allow_failure, hold_fd, write_only));
         } else {
-            nodes_parsed.emplace_back(std::make_unique<PropertyNode>(
-                    name, path, values_parsed, static_cast<std::size_t>(default_index), reset));
+            nodes_parsed.emplace_back(
+                    std::make_unique<PropertyNode>(name, paths_parsed, values_parsed,
+                                                   static_cast<std::size_t>(default_index), reset));
         }
     }
     LOG(INFO) << nodes_parsed.size() << " Nodes parsed successfully";
@@ -1003,19 +1088,21 @@ bool HintManager::IsAdpfProfileSupported(const std::string &profile_name) const 
 }
 
 void HintManager::OnNodeUpdate(const std::string &name,
-                               __attribute__((unused)) const std::string &path,
+                               __attribute__((unused)) const std::vector<std::string> &paths,
                                const std::string &value) {
     // Check if the node is to update ADPF.
-    if (path.starts_with(kAdpfEventNodePath)) {
-        std::string tag = path.substr(strlen(kAdpfEventNodePath));
-        bool updated = SetAdpfProfile(tag, value);
-        if (!updated) {
-            LOG(DEBUG) << "OnNodeUpdate:[" << name << "] failed to update '" << value << "'";
-            return;
-        }
-        auto &callback_list = tag_update_callback_list_[tag];
-        for (const auto &callback : callback_list) {
-            (*callback)(tag_profile_map_[tag]);
+    for (const auto &path : paths) {
+        if (path.starts_with(kAdpfEventNodePath)) {
+            std::string tag = path.substr(strlen(kAdpfEventNodePath));
+            bool updated = SetAdpfProfile(tag, value);
+            if (!updated) {
+                LOG(DEBUG) << "OnNodeUpdate:[" << name << "] failed to update '" << value << "'";
+                return;
+            }
+            auto &callback_list = tag_update_callback_list_[tag];
+            for (const auto &callback : callback_list) {
+                (*callback)(tag_profile_map_[tag]);
+            }
         }
     }
 }
@@ -1040,7 +1127,11 @@ void HintManager::UnregisterAdpfUpdateEvent(const std::string &tag,
 }
 
 std::optional<std::string> HintManager::gpu_sysfs_config_path() const {
-    return gpu_sysfs_config_path_;
+    return other_configs_.GPUSysfsPath;
+}
+
+OtherConfigs HintManager::GetOtherConfigs() const {
+    return other_configs_;
 }
 
 }  // namespace perfmgr

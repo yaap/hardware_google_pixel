@@ -18,8 +18,8 @@
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
-#include <algorithm>
 #include <thread>
 
 #include "perfmgr/PropertyNode.h"
@@ -47,7 +47,7 @@ static inline const std::string _InitProperty(const std::string& path) {
 // Test init with no default value
 TEST(PropertyNodeTest, NoInitDefaultTest) {
     std::string key = _InitProperty("test.libperfmgr.key");
-    PropertyNode t("t", key, {{"value0"}, {"value1"}, {"value2"}}, 1, false);
+    PropertyNode t("t", {key}, {{"value0"}, {"value1"}, {"value2"}}, 1, false);
     t.Update(false);
     _VerifyPropertyValue(key, "");
 }
@@ -55,11 +55,11 @@ TEST(PropertyNodeTest, NoInitDefaultTest) {
 // Test init with default value
 TEST(PropertyNodeTest, InitDefaultTest) {
     std::string key = _InitProperty("test.libperfmgr.key");
-    PropertyNode t("t", key, {{"value0"}, {"value1"}, {"value2"}}, 1, true);
+    PropertyNode t("t", {key}, {{"value0"}, {"value1"}, {"value2"}}, 1, true);
     t.Update(false);
     _VerifyPropertyValue(key, "value1");
     std::string key2 = _InitProperty("test.libperfmgr.key2");
-    PropertyNode t2("t2", key2, {{"value0"}, {"value1"}, {"value2"}}, 0, true);
+    PropertyNode t2("t2", {key2}, {{"value0"}, {"value1"}, {"value2"}}, 0, true);
     t2.Update(false);
     _VerifyPropertyValue(key2, "value0");
 }
@@ -67,7 +67,7 @@ TEST(PropertyNodeTest, InitDefaultTest) {
 // Test DumpToFd
 TEST(PropertyNodeTest, DumpToFdTest) {
     std::string key = _InitProperty("test.libperfmgr.key");
-    PropertyNode t("test_dump", key, {{"value0"}, {"value1"}, {"value2"}}, 1,
+    PropertyNode t("test_dump", {key}, {{"value0"}, {"value1"}, {"value2"}}, 1,
                    true);
     t.Update(false);
     TemporaryFile dumptf;
@@ -89,7 +89,7 @@ TEST(PropertyNodeTest, DumpToFdTest) {
 // Test GetValueIndex
 TEST(PropertyNodeTest, GetValueIndexTest) {
     std::string key = _InitProperty("test.libperfmgr.key");
-    PropertyNode t("t", key, {{"value0"}, {"value1"}, {"value2"}}, 1, false);
+    PropertyNode t("t", {key}, {{"value0"}, {"value1"}, {"value2"}}, 1, false);
     std::size_t index = 0;
     EXPECT_TRUE(t.GetValueIndex("value2", &index));
     EXPECT_EQ(2u, index);
@@ -101,7 +101,7 @@ TEST(PropertyNodeTest, GetValueIndexTest) {
 // Test GetValues
 TEST(PropertyNodeTest, GetValuesTest) {
     std::string key = _InitProperty("test.libperfmgr.key");
-    PropertyNode t("t", key, {{"value0"}, {"value1"}, {"value2"}}, 1, false);
+    PropertyNode t("t", {key}, {{"value0"}, {"value1"}, {"value2"}}, 1, false);
     std::vector values = t.GetValues();
     EXPECT_EQ(3u, values.size());
     EXPECT_EQ("value0", values[0]);
@@ -113,9 +113,9 @@ TEST(PropertyNodeTest, GetValuesTest) {
 TEST(PropertyNodeTest, GetPropertiesTest) {
     std::string test_name = "TESTREQ_1";
     std::string test_path = "TEST_PATH";
-    PropertyNode t(test_name, test_path, {}, 0, false);
+    PropertyNode t(test_name, {test_path}, {}, 0, false);
     EXPECT_EQ(test_name, t.GetName());
-    EXPECT_EQ(test_path, t.GetPath());
+    EXPECT_THAT(t.GetPaths(), testing::ElementsAre(test_path));
     EXPECT_EQ(0u, t.GetValues().size());
     EXPECT_EQ(0u, t.GetDefaultIndex());
     EXPECT_FALSE(t.GetResetOnInit());
@@ -124,7 +124,7 @@ TEST(PropertyNodeTest, GetPropertiesTest) {
 // Test add request
 TEST(PropertyNodeTest, AddRequestTest) {
     std::string key = _InitProperty("test.libperfmgr.key");
-    PropertyNode t("t", key, {{"value0"}, {"value1"}, {""}}, 2, true);
+    PropertyNode t("t", {key}, {{"value0"}, {"value1"}, {""}}, 2, true);
     auto start = std::chrono::steady_clock::now();
     EXPECT_TRUE(t.AddRequest(1, "INTERACTION", start + 500ms));
     std::chrono::milliseconds expire_time = t.Update(true);
@@ -154,7 +154,7 @@ TEST(PropertyNodeTest, AddRequestTest) {
 // Test remove request
 TEST(PropertyNodeTest, RemoveRequestTest) {
     std::string key = _InitProperty("test.libperfmgr.key");
-    PropertyNode t("t", key, {{"value0"}, {"value1"}, {"value2"}}, 2, true);
+    PropertyNode t("t", {key}, {{"value0"}, {"value1"}, {"value2"}}, 2, true);
     auto start = std::chrono::steady_clock::now();
     EXPECT_TRUE(t.AddRequest(1, "INTERACTION", start + 500ms));
     std::chrono::milliseconds expire_time = t.Update(true);
@@ -184,7 +184,7 @@ TEST(PropertyNodeTest, RemoveRequestTest) {
 // Test add request
 TEST(PropertyNodeTest, AddRequestTestOverride) {
     std::string key = _InitProperty("test.libperfmgr.key");
-    PropertyNode t("t", key, {{"value0"}, {"value1"}, {"value2"}}, 2, true);
+    PropertyNode t("t", {key}, {{"value0"}, {"value1"}, {"value2"}}, 2, true);
     auto start = std::chrono::steady_clock::now();
     EXPECT_TRUE(t.AddRequest(1, "INTERACTION", start + 500ms));
     std::chrono::milliseconds expire_time = t.Update(true);

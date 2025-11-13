@@ -97,7 +97,7 @@ message Atom {
       VendorLongIRQStatsReported vendor_long_irq_stats_reported = 105043;
       VendorResumeLatencyStats vendor_resume_latency_stats = 105044;
       VendorTempResidencyStats vendor_temp_residency_stats = 105045;
-      BrownoutDetected brownout_detected = 105046;
+      BrownoutDetected brownout_detected = 105046 [(android.os.statsd.module) = "pixelbcl"];
       PcieLinkStatsReported pcie_link_stats = 105047;
       VendorSensorCoolingDeviceStats vendor_sensor_cooling_device_stats = 105048;
 
@@ -129,7 +129,6 @@ message Atom {
       BatteryTimeToFullStatsReported battery_time_to_full_stats_reported = 105074;
       VendorAudioDirectUsbAccessUsageStats vendor_audio_direct_usb_access_usage_stats = 105075 [(android.os.statsd.module) = "pixelaudio"];
       VendorAudioUsbConfigStats vendor_audio_usb_config_stats = 105076 [(android.os.statsd.module) = "pixelaudio"];
-      GpuFrequencyTimeInStatePerUidReported gpu_frequency_time_in_state_per_uid_reported = 105077;
       GpuFrozenAppsMemoryPerUid gpu_frozen_apps_memory_per_uid = 105078;
       RepairModeEntered repair_mode_entered = 105079;
       RepairModeExited repair_mode_exited = 105080;
@@ -147,8 +146,12 @@ message Atom {
       BatteryFirmwareUpdateReported battery_firmware_update_reported = 105092;
       PowerFifoDump power_fifo_dump = 105093 [(android.os.statsd.module) = "pixelpower"];
       GnssTtffReported gnss_ttff_reported = 105094 [(android.os.statsd.module) = "pixelgnss"];
+      StorageUfsErrorCountReported storage_ufs_error_count_reported = 105095;
+      UfsStorageTypeReported ufs_storage_type_reported = 105096;
+      ThermalTjTripCountReported thermal_tj_trip_count_reported = 105097;
     }
     // AOSP atom ID range ends at 109999
+    reserved 105077; // moved GpuFrequencyTimeInStatePerUidReported
     reserved 109997; // reserved for VtsVendorAtomJavaTest test atom
     reserved 109998; // reserved for VtsVendorAtomJavaTest test atom
     reserved 109999; // reserved for VtsVendorAtomJavaTest test atom
@@ -251,6 +254,8 @@ message ChargeStats {
     optional int32 aacr_algo = 19;
     optional int32 aacp_version = 20;
     optional int32 aacc = 21;
+    optional int32 aafv = 22;
+    optional int32 max_charge_voltage = 23;
 }
 
 /* A message containing stats from each charge voltage tier. */
@@ -1859,6 +1864,22 @@ message BrownoutDetected {
     optional int32 odpm_irq_stat_cpu1_bckup = 90;
     // odpm irq stat cpu2 at brownout
     optional int32 odpm_irq_stat_cpu2_bckup = 91;
+    // triggered ODPM Reading: Channel 25
+    optional int32 odpm_channel25 = 92;
+    // triggered ODPM Reading: Channel 26
+    optional int32 odpm_channel26 = 93;
+    // triggered ODPM Reading: Channel 27
+    optional int32 odpm_channel27 = 94;
+    // triggered ODPM Reading: Channel 28
+    optional int32 odpm_channel28 = 95;
+    // triggered ODPM Reading: Channel 29
+    optional int32 odpm_channel29 = 96;
+    // triggered ODPM Reading: Channel 30
+    optional int32 odpm_channel30 = 97;
+    // triggered ODPM Reading: Channel 31
+    optional int32 odpm_channel31 = 98;
+    // triggered ODPM Reading: Channel 32
+    optional int32 odpm_channel32 = 99;
 }
 
 /*
@@ -2393,6 +2414,7 @@ message PixelImpulseUsageReported {
       TAG_SKIN_TEMPERATURE = 2;
       TAG_BUSINESS_SCOPE = 3;
       TAG_NON_BUSINESS_SCOPE = 4;
+      TAG_RESTART_DELAY = 5;
   }
   /* Tag for debugging purpose */
   optional Tag tag = 5;
@@ -2776,87 +2798,6 @@ message VendorAudioUsbConfigStats {
   optional int32 duration_second = 7;
 };
 
-/*
- * Per-app GPU DVFS time-in-state data, for each GPU frequency.
- * Logging is capped at 15 apps/uids max, per 6 hours.
- * Logged from:
- *   hardware/google/pixel/pixelstats/
- *
- * See: b/341045478, b/340834608
- *
- * Estimated Logging Rate:
- * Peak: 15 times in 6 hours | Avg: 15 times in 6 hours
- */
-message GpuFrequencyTimeInStatePerUidReported {
-  /* Vendor reverse domain name (expecting "com.google.pixel"). */
-  optional string reverse_domain_name = 1;
-
-  /* App UID. */
-  optional int32 uid = 2 [(android.os.statsd.is_uid) = true];
-
-  /*
-   * Time passed, since the previous push of this atom for this uid, in
-   * milliseconds.
-   */
-  optional int32 reporting_duration_ms = 3;
-
-  /*
-   * Report up to 15 different frequencies, and how much time was spent in each
-   * frequency, by this app/uid since the previous push of this atom.
-   * Frequencies are given in KHz, and time is given in milliseconds since the
-   * previous push of this atom.
-   * Each individual device will always report the same frequency in the same
-   * field (for the aggregation in the metric(s) to work). If a frequency had 0
-   * time spent in it (since the previous atom push) for an app/uid - both
-   * frequency and duration fields for that frequency will not be set (to save
-   * space).
-   */
-  optional int32 frequency_1_khz = 4;
-  optional int32 time_1_millis = 5;
-
-  optional int32 frequency_2_khz = 6;
-  optional int32 time_2_millis = 7;
-
-  optional int32 frequency_3_khz = 8;
-  optional int32 time_3_millis = 9;
-
-  optional int32 frequency_4_khz = 10;
-  optional int32 time_4_millis = 11;
-
-  optional int32 frequency_5_khz = 12;
-  optional int32 time_5_millis = 13;
-
-  optional int32 frequency_6_khz = 14;
-  optional int32 time_6_millis = 15;
-
-  optional int32 frequency_7_khz = 16;
-  optional int32 time_7_millis = 17;
-
-  optional int32 frequency_8_khz = 18;
-  optional int32 time_8_millis = 19;
-
-  optional int32 frequency_9_khz = 20;
-  optional int32 time_9_millis = 21;
-
-  optional int32 frequency_10_khz = 22;
-  optional int32 time_10_millis = 23;
-
-  optional int32 frequency_11_khz = 24;
-  optional int32 time_11_millis = 25;
-
-  optional int32 frequency_12_khz = 26;
-  optional int32 time_12_millis = 27;
-
-  optional int32 frequency_13_khz = 28;
-  optional int32 time_13_millis = 29;
-
-  optional int32 frequency_14_khz = 30;
-  optional int32 time_14_millis = 31;
-
-  optional int32 frequency_15_khz = 32;
-  optional int32 time_15_millis = 33;
-}
-
 /* GPU memory allocation information for frozen apps */
 message GpuFrozenAppsMemoryPerUid {
   /* Vendor reverse domain name (expecting "com.google.pixel"). */
@@ -3233,7 +3174,7 @@ message MediaPlaybackUsageStatsReported {
   optional float volume = 10;
 
   /* Average power in milliwatts. -1 if unavailable. */
-  optional float average_power = 11;
+  optional float average_power = 11 [deprecated = true];
 
   /* Sample rate used in the media playback. */
   optional int32 sample_rate = 12;
@@ -3266,6 +3207,12 @@ message MediaPlaybackUsageStatsReported {
 
   /* Offload Encoding used in the media playback. */
   optional OffloadEncoding offload_encoding = 16;
+
+  /* Powers in milliwatts for each speaker. There are at most 4 speakers. */
+  repeated float milliwatt_powers = 17;
+
+  /* Active duration in second for each speaker. There are at most 4 speakers. */
+  repeated int32 speaker_active_duration_second = 18;
 }
 
 /*
@@ -3556,4 +3503,102 @@ message GnssTtffReported {
   optional bool reference_frequency_used = 20;
   optional bool almanac_used = 21;
   optional bool ephemeris_used = 22;
+}
+
+/*
+ * Collects and reports counts of various UFS error types.
+ * Logged from:
+ *   hardware/google/pixel/pixelstats/SysfsCollector.cpp
+ *
+ * Estimated Logging Rate:
+ * Peak: 1 times in 24 hours | Avg: 1 times per device per day
+ */
+message StorageUfsErrorCountReported {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+
+  /* Number of auto_hibern8_err_count read from the ufs err_stats */
+  optional int32 auto_hibern8_err_count = 2;
+  /* Number of dev_reset_count read from the ufs err_stats */
+  optional int32 dev_reset_count = 3;
+  /* Number of dl_err_count read from the ufs err_stats */
+  optional int32 dl_err_count = 4;
+  /* Number of dme_err_count read from the ufs err_stats */
+  optional int32 dme_err_count = 5;
+  /* Number of fatal_err_count read from the ufs err_stats */
+  optional int32 fatal_err_count = 6;
+  /* Number of host_reset_count read from the ufs err_stats */
+  optional int32 host_reset_count = 7;
+  /* Number of link_startup_err_count read from the ufs err_stats */
+  optional int32 link_startup_err_count = 8;
+  /* Number of nl_err_count read from the ufs err_stats */
+  optional int32 nl_err_count = 9;
+  /* Number of pa_err_count read from the ufs err_stats */
+  optional int32 pa_err_count = 10;
+  /* Number of resume_err_count read from the ufs err_stats */
+  optional int32 resume_err_count = 11;
+  /* Number of suspend_err_count read from the ufs err_stats */
+  optional int32 suspend_err_count = 12;
+  /* Number of task_abort_count read from the ufs err_stats */
+  optional int32 task_abort_count = 13;
+  /* Number of tl_err_count read from the ufs err_stats */
+  optional int32 tl_err_count = 14;
+}
+
+/*
+ * Collects and reports UFS storage type, ZUFS or legacy.
+ * Logged from:
+ *   hardware/google/pixel/pixelstats/SysfsCollector.cpp
+ *
+ * Estimated Logging Rate:
+ * Peak: 1 times in 24 hours | Avg: 1 times per device per day
+ */
+message UfsStorageTypeReported {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+
+  enum UfsType {
+    UNKNOWN = 0;
+    CONVENTIONAL = 1;
+    ZUFS = 2;
+  }
+
+  /* ZUFS type is provisioned */
+  optional UfsType ufs_type = 2;
+}
+
+enum TjThermalZone {
+  UNKNOWN_TZ = 0;
+  BIG = 1;
+  BIG_MID = 2;
+  MID = 3;
+  LITTLE = 4;
+  GPU = 5;
+  TPU = 6;
+  AUR = 7;
+  ISP = 8;
+  MEM = 9;
+  AOC = 10;
+}
+
+/*
+ * A message containing the number of times a thermal trip occurred for a
+ * particular trip number on a particular thermal zone.
+ *
+ * Conditions: We generate the atom only when the thermal zone trip is triggered
+ * for that trip number.
+ *
+ * Logged per thermal zone for configured trip number once per day.
+ *
+ * Logged from: hardware/google/pixel/pixelstats/SysfsCollector.cpp
+ */
+message ThermalTjTripCountReported {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+  /* The tj thermal zone on which the trip occurred. */
+  optional TjThermalZone thermal_zone = 2;
+  /* The trip number for the thermal zone on which the trip occurred. */
+  optional int32 trip_number = 3;
+  /* The number of times the trip occurred. */
+  optional int32 trip_count = 4;
 }

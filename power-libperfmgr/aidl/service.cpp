@@ -21,6 +21,7 @@
 #include <android/binder_ibinder_platform.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
+#include <processgroup/processgroup.h>
 #include <perfmgr/HintManager.h>
 
 #include <thread>
@@ -28,7 +29,6 @@
 #include "MetricUploader.h"
 #include "Power.h"
 #include "PowerExt.h"
-#include "PowerSessionManager.h"
 #include "disp-power/DisplayLowPower.h"
 #include "utils/ThermalStateListener.h"
 
@@ -51,6 +51,11 @@ int main() {
     }
 
     std::shared_ptr<DisplayLowPower> dlpw = std::make_shared<DisplayLowPower>();
+
+    // set task profile "PreferIdle" to lower scheduling latency.
+    if (!SetTaskProfiles(0, {"PreferIdleSet"})) {
+        LOG(WARNING) << "Device does not support 'PreferIdleSet' task profile.";
+    }
 
     // single thread
     ABinderProcess_setThreadPoolMaxThreadCount(0);

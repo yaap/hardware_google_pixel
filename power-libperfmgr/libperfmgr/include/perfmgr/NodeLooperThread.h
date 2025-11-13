@@ -10,7 +10,7 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specic language governing permissions and
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "perfmgr/JobQueueManager.h"
 #include "perfmgr/Node.h"
 
 namespace android {
@@ -84,6 +85,8 @@ class NodeLooperThread : public ::android::Thread {
   private:
     NodeLooperThread(NodeLooperThread const&) = delete;
     NodeLooperThread &operator=(NodeLooperThread const &) = delete;
+
+    status_t readyToRun() override;
     bool threadLoop() override;
 
     static constexpr auto kMaxUpdatePeriod = std::chrono::milliseconds::max();
@@ -98,6 +101,9 @@ class NodeLooperThread : public ::android::Thread {
 
     // lock to protect nodes_
     ::android::Mutex lock_;
+
+    // Job queue for threadloop to process
+    JobQueueManager jobmgr_;
 };
 
 }  // namespace perfmgr

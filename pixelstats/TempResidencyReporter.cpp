@@ -38,7 +38,6 @@ using aidl::android::frameworks::stats::VendorAtom;
 using aidl::android::frameworks::stats::VendorAtomValue;
 using android::base::ReadFileToString;
 using android::base::WriteStringToFile;
-using android::hardware::google::pixel::PixelAtoms::ThermalDfsStats;
 
 bool updateOffsetAndCheckBound(int *offset, const int &bytes_read, const int &data_len) {
     *offset += bytes_read;

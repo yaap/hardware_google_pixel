@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <cerrno>
 #define ATRACE_TAG (ATRACE_TAG_POWER | ATRACE_TAG_HAL)
 #define LOG_TAG "libperfmgr"
 
@@ -30,19 +31,21 @@
 namespace android {
 namespace perfmgr {
 
-FileNode::FileNode(std::string name, std::string node_path, std::vector<RequestGroup> req_sorted,
-                   std::size_t default_val_index, bool reset_on_init, bool truncate, bool hold_fd,
-                   bool write_only)
-    : Node(std::move(name), std::move(node_path), std::move(req_sorted), default_val_index,
+FileNode::FileNode(std::string name, std::vector<std::string> node_paths,
+                   std::vector<RequestGroup> req_sorted, std::size_t default_val_index,
+                   bool reset_on_init, bool truncate, bool allow_failure, bool hold_fd, bool write_only)
+    : Node(std::move(name), std::move(node_paths), std::move(req_sorted), default_val_index,
            reset_on_init),
       hold_fd_(hold_fd),
       truncate_(truncate),
       write_only_(write_only),
-      warn_timeout_(android::base::GetBoolProperty("ro.debuggable", false) ? 5ms : 50ms) {}
+      warn_timeout_(android::base::GetBoolProperty("ro.debuggable", false) ? 5ms : 50ms),
+      allow_failure_(allow_failure) {}
 
 std::chrono::milliseconds FileNode::Update(bool log_error) {
     std::size_t value_index = default_val_index_;
     std::chrono::milliseconds expire_time = std::chrono::milliseconds::max();
+    bool successfullyUpdated = true;
 
     // Find the highest outstanding request's expire time
     for (std::size_t i = 0; i < req_sorted_.size(); i++) {
@@ -56,52 +59,70 @@ std::chrono::milliseconds FileNode::Update(bool log_error) {
     if (value_index != current_val_index_ || reset_on_init_) {
         const std::string& req_value =
             req_sorted_[value_index].GetRequestValue();
+
         if (ATRACE_ENABLED()) {
             ATRACE_INT(("N:" + GetName()).c_str(), value_index);
             const std::string tag =
                     GetName() + ":" + req_value + ":" + std::to_string(expire_time.count());
             ATRACE_BEGIN(tag.c_str());
         }
-        android::base::Timer t;
+
         int flags = O_WRONLY | O_CLOEXEC;
+
         if (GetTruncate()) {
             flags |= O_TRUNC;
         }
-        fd_.reset(TEMP_FAILURE_RETRY(open(node_path_.c_str(), flags)));
 
-        if (fd_ == -1 || !android::base::WriteStringToFd(req_value, fd_)) {
-            if (log_error) {
-                LOG(WARNING) << "Failed to write to node: " << node_path_
-                             << " with value: " << req_value << ", fd: " << fd_;
+        for (const auto &path : node_paths_) {
+            android::base::Timer t;
+
+            fd_.reset(TEMP_FAILURE_RETRY(open(path.c_str(), flags)));
+
+            if (fd_ == -1 || !android::base::WriteStringToFd(req_value, fd_)) {
+                if (!allow_failure_ || fd_ != -1 || errno != ENOENT) {
+                    if (log_error) {
+                        LOG(WARNING) << "Failed to write to node: " << path
+                                    << " with value: " << req_value << ", fd: " << fd_;
+                    }
+                    // Retry in 500ms or sooner
+                    expire_time = std::min(expire_time, std::chrono::milliseconds(500));
+                    successfullyUpdated = false;
+                }
+            } else {
+                // For regular file system, we need fsync
+                fsync(fd_);
+                // Some dev node requires file to remain open during the entire hint
+                // duration e.g. /dev/cpu_dma_latency, so fd_ is intentionally kept
+                // open during any requested value other than default one. If
+                // request a default value, node will write the value and then
+                // release the fd.
+                if ((!hold_fd_) || value_index == default_val_index_) {
+                    fd_.reset();
+                }
+                auto duration = t.duration();
+                if (duration > warn_timeout_) {
+                    LOG(WARNING) << "Slow writing to file: '" << path << "' with value: '"
+                                << req_value << "' took: " << duration.count() << " ms";
+                }
             }
-            // Retry in 500ms or sooner
-            expire_time = std::min(expire_time, std::chrono::milliseconds(500));
-        } else {
-            // For regular file system, we need fsync
-            fsync(fd_);
-            // Some dev node requires file to remain open during the entire hint
-            // duration e.g. /dev/cpu_dma_latency, so fd_ is intentionally kept
-            // open during any requested value other than default one. If
-            // request a default value, node will write the value and then
-            // release the fd.
-            if ((!hold_fd_) || value_index == default_val_index_) {
-                fd_.reset();
-            }
-            auto duration = t.duration();
-            if (duration > warn_timeout_) {
-                LOG(WARNING) << "Slow writing to file: '" << node_path_
-                             << "' with value: '" << req_value
-                             << "' took: " << duration.count() << " ms";
-            }
+        }
+
+        if (successfullyUpdated){
             // Update current index only when succeed
             current_val_index_ = value_index;
             reset_on_init_ = false;
         }
+
         if (ATRACE_ENABLED()) {
             ATRACE_END();
         }
     }
+
     return expire_time;
+}
+
+bool FileNode::GetAllowFailure() const {
+    return allow_failure_;
 }
 
 bool FileNode::GetHoldFd() const {
@@ -113,24 +134,22 @@ bool FileNode::GetTruncate() const {
 }
 
 void FileNode::DumpToFd(int fd) const {
-    std::string node_value;
-    if (!write_only_ && !android::base::ReadFileToString(node_path_, &node_value)) {
-        LOG(ERROR) << "Failed to read node path: " << node_path_;
+    std::string buf("Node Name\tNode Path\tCurrent Index\tCurrent Value\tHold FD\tTruncate\n");
+
+    for (const auto &path : node_paths_) {
+        std::string node_value;
+        if (!write_only_ && !android::base::ReadFileToString(path, &node_value)) {
+            LOG(ERROR) << "Failed to read node path: " << path;
+        }
+        node_value = android::base::Trim(node_value);
+        buf += android::base::StringPrintf("%s\t%s\t%zu\t%s\t%d\t%d\n", name_.c_str(), path.c_str(),
+                                           current_val_index_, node_value.c_str(), hold_fd_, truncate_);
     }
-    node_value = android::base::Trim(node_value);
-    std::string buf(
-            android::base::StringPrintf("Node Name\t"
-                                        "Node Path\t"
-                                        "Current Index\t"
-                                        "Current Value\t"
-                                        "Hold FD\t"
-                                        "Truncate\n"
-                                        "%s\t%s\t%zu\t%s\t%d\t%d\n",
-                                        name_.c_str(), node_path_.c_str(), current_val_index_,
-                                        node_value.c_str(), hold_fd_, truncate_));
+
     if (!android::base::WriteStringToFd(buf, fd)) {
         LOG(ERROR) << "Failed to dump fd: " << fd;
     }
+
     for (std::size_t i = 0; i < req_sorted_.size(); i++) {
         req_sorted_[i].DumpToFd(
             fd, android::base::StringPrintf("\t\tReq%zu:\t", i));

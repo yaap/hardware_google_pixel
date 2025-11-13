@@ -17,12 +17,13 @@
 #pragma once
 
 #include <PowerStatsAidl.h>
-#include "PowerStatsEnergyAttribution.h"
-
 #include <utils/RefBase.h>
 
 #include <map>
 #include <set>
+#include <unordered_set>
+
+#include "PowerStatsEnergyAttribution.h"
 
 namespace aidl {
 namespace android {
@@ -64,7 +65,8 @@ class PowerStatsEnergyConsumer : public PowerStats::IEnergyConsumer {
 
     std::pair<EnergyConsumerType, std::string> getInfo() override { return {kType, kName}; }
 
-    std::optional<EnergyConsumerResult> getEnergyConsumed() override;
+    std::optional<EnergyConsumerResult> getEnergyConsumed(
+            const std::vector<EnergyMeasurement> &energyData) override;
 
     std::string getConsumerName() override;
 
@@ -79,7 +81,7 @@ class PowerStatsEnergyConsumer : public PowerStats::IEnergyConsumer {
     const EnergyConsumerType kType;
     const std::string kName;
     std::shared_ptr<PowerStats> mPowerStats;
-    std::vector<int32_t> mChannelIds;
+    std::unordered_set<int32_t> mChannelIds;
     int32_t mPowerEntityId;
     bool mWithAttribution;
     std::unordered_map<int32_t, std::string> mAttrInfoPath;

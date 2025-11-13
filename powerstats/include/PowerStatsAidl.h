@@ -43,7 +43,8 @@ class PowerStats : public BnPowerStats {
       public:
         virtual ~IEnergyConsumer() = default;
         virtual std::pair<EnergyConsumerType, std::string> getInfo() = 0;
-        virtual std::optional<EnergyConsumerResult> getEnergyConsumed() = 0;
+        virtual std::optional<EnergyConsumerResult> getEnergyConsumed(
+                const std::vector<EnergyMeasurement> &energyData) = 0;
         virtual std::string getConsumerName() = 0;
     };
 
@@ -85,8 +86,13 @@ class PowerStats : public BnPowerStats {
                                  const std::vector<StateResidencyResult> &results);
     void dumpStateResidencyOneShot(std::ostringstream &oss,
                                    const std::vector<StateResidencyResult> &results);
-    void dumpEnergyConsumer(std::ostringstream &oss, bool delta);
-    void dumpEnergyMeter(std::ostringstream &oss, bool delta);
+    void dumpEnergyConsumer(std::ostringstream &oss, bool delta,
+                            const std::vector<EnergyMeasurement> &energyData);
+    void dumpEnergyMeter(std::ostringstream &oss, bool delta,
+                         const std::vector<EnergyMeasurement> &energyData);
+    ndk::ScopedAStatus getEnergyConsumed(const std::vector<int32_t> &in_energyConsumerIds,
+                                         const std::vector<EnergyMeasurement> &in_energyMeasurement,
+                                         std::vector<EnergyConsumerResult> *_aidl_return);
 
     std::vector<std::unique_ptr<IStateResidencyDataProvider>> mStateResidencyDataProviders;
     std::vector<PowerEntity> mPowerEntityInfos;

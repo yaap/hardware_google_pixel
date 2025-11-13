@@ -34,6 +34,7 @@
 #include "GpuCalculationHelpers.h"
 #include "tests/mocks/MockHintManager.h"
 #include "tests/mocks/MockPowerSessionManager.h"
+#include "utils/TgidTypeChecker.h"
 
 namespace aidl {
 namespace google {
@@ -58,9 +59,9 @@ static inline int64_t ns_to_100us(int64_t ns) {
     return ns / 100000;
 }
 
-static const char systemSessionCheckPath[] = "/proc/vendor_sched/is_tgid_system_ui";
-static const bool systemSessionCheckNodeExist = access(systemSessionCheckPath, W_OK) == 0;
 static constexpr int32_t kTargetDurationChangeThreshold = 30;  // Percentage change threshold
+static const char kHINTNAME_APP_FIRST_FRAME[] = "PER_ADPF_SESSION_FIRST_FRAME";
+static const char kHINTNAME_SYS_FIRST_FRAME[] = "ALL_ADPF_SESSIONS_FIRST_FRAME";
 
 }  // namespace
 
@@ -144,37 +145,15 @@ int64_t PowerHintSession<HintManagerT, PowerSessionManagerT>::convertWorkDuratio
 }
 
 template <class HintManagerT, class PowerSessionManagerT>
-ProcessTag PowerHintSession<HintManagerT, PowerSessionManagerT>::getProcessTag(int32_t tgid) {
-    if (!systemSessionCheckNodeExist) {
-        ALOGD("Vendor system session checking node doesn't exist");
-        return ProcessTag::DEFAULT;
-    }
-
-    int flags = O_WRONLY | O_TRUNC | O_CLOEXEC;
-    ::android::base::unique_fd fd(TEMP_FAILURE_RETRY(open(systemSessionCheckPath, flags)));
-    if (fd == -1) {
-        ALOGW("Can't open system session checking node %s", systemSessionCheckPath);
-        return ProcessTag::DEFAULT;
-    }
-    // The file-write return status is true if the task belongs to systemUI or Launcher. Other task
-    // or invalid tgid will return a false value.
-    auto stat = ::android::base::WriteStringToFd(std::to_string(tgid), fd);
-    ALOGD("System session checking result: %d - %d", tgid, stat);
-    if (stat) {
-        return ProcessTag::SYSTEM_UI;
-    } else {
-        return ProcessTag::DEFAULT;
-    }
-}
-
-template <class HintManagerT, class PowerSessionManagerT>
 PowerHintSession<HintManagerT, PowerSessionManagerT>::PowerHintSession(
         int32_t tgid, int32_t uid, const std::vector<int32_t> &threadIds, int64_t durationNs,
         SessionTag tag)
     : mPSManager(PowerSessionManagerT::getInstance()),
       mSessionId(++sSessionIDCounter),
       mSessTag(tag),
-      mProcTag(getProcessTag(tgid)),
+      mProcTag(TgidTypeChecker::getInstance()->isValid()
+                       ? TgidTypeChecker::getInstance()->getProcessTag(tgid)
+                       : ProcessTag::DEFAULT),
       mIdString(StringPrintf("%" PRId32 "-%" PRId32 "-%" PRId64 "-%s-%" PRId32, tgid, uid,
                              mSessionId, toString(tag).c_str(), static_cast<int32_t>(mProcTag))),
       mDescriptor(std::make_shared<AppHintDesc>(mSessionId, tgid, uid, threadIds, tag, mProcTag,
@@ -183,6 +162,9 @@ PowerHintSession<HintManagerT, PowerSessionManagerT>::PowerHintSession(
       mAdpfProfile(mProcTag != ProcessTag::DEFAULT
                            ? HintManager::GetInstance()->GetAdpfProfile(toString(mProcTag))
                            : HintManager::GetInstance()->GetAdpfProfile(toString(mSessTag))),
+      mEnableMetricCollection(
+              mProcTag != ProcessTag::SYSTEM_UI &&
+              HintManager::GetInstance()->GetOtherConfigs().enableMetricCollection.value_or(false)),
       mOnAdpfUpdate(
               [this](const std::shared_ptr<AdpfConfig> config) { this->setAdpfProfile(config); }),
       mSessionRecords(getAdpfProfile()->mHeuristicBoostOn.has_value() &&
@@ -202,7 +184,8 @@ PowerHintSession<HintManagerT, PowerSessionManagerT>::PowerHintSession(
     }
 
     mLastUpdatedTime = std::chrono::steady_clock::now();
-    mPSManager->addPowerSession(mIdString, mDescriptor, mAppDescriptorTrace, threadIds);
+    mPSManager->addPowerSession(mIdString, mDescriptor, mAppDescriptorTrace,
+                                mEnableMetricCollection, threadIds);
     // init boost
     auto adpfConfig = getAdpfProfile();
     mPSManager->voteSet(
@@ -247,12 +230,23 @@ void PowerHintSession<HintManagerT, PowerSessionManagerT>::updatePidControlVaria
 }
 
 template <class HintManagerT, class PowerSessionManagerT>
-void PowerHintSession<HintManagerT, PowerSessionManagerT>::tryToSendPowerHint(std::string hint) {
+bool PowerHintSession<HintManagerT, PowerSessionManagerT>::hintSupported(
+        const std::string &hint) const {
     if (!mSupportedHints[hint].has_value()) {
         mSupportedHints[hint] = HintManagerT::GetInstance()->IsHintSupported(hint);
     }
-    if (mSupportedHints[hint].value()) {
-        HintManagerT::GetInstance()->DoHint(hint);
+    return mSupportedHints[hint].value();
+}
+
+template <class HintManagerT, class PowerSessionManagerT>
+void PowerHintSession<HintManagerT, PowerSessionManagerT>::tryToSendPowerHint(
+        std::string hint, std::optional<std::chrono::milliseconds> duration) {
+    if (hintSupported(hint)) {
+        if (duration) {
+            HintManagerT::GetInstance()->DoHint(hint, *duration);
+        } else {
+            HintManagerT::GetInstance()->DoHint(hint);
+        }
     }
 }
 
@@ -474,16 +468,17 @@ ndk::ScopedAStatus PowerHintSession<HintManagerT, PowerSessionManagerT>::reportA
 
     bool hboostEnabled =
             adpfConfig->mHeuristicBoostOn.has_value() && adpfConfig->mHeuristicBoostOn.value();
-    bool heurRampupEnabled =
-            adpfConfig->mHeuristicRampup.has_value() && adpfConfig->mHeuristicRampup.value();
+    bool heurRampupEnabled = adpfConfig->mHeuristicRampup.has_value() &&
+                             adpfConfig->mHeuristicRampup.value() && mProcTag != ProcessTag::CHROME;
 
     if (hboostEnabled) {
-        FrameBuckets newFramesInBuckets;
+        FrameTimingMetrics newFrameMetrics;
         mSessionRecords->addReportedDurations(
-                actualDurations, mDescriptor->targetNs.count(), newFramesInBuckets,
+                actualDurations, mDescriptor->targetNs.count(), newFrameMetrics,
                 mSessTag == SessionTag::SURFACEFLINGER && mPSManager->getGameModeEnableState());
         mPSManager->updateHboostStatistics(mSessionId, mJankyLevel, actualDurations.size());
-        mPSManager->updateFrameBuckets(mSessionId, newFramesInBuckets);
+        mPSManager->updateFrameMetrics(mSessionId, newFrameMetrics);
+        mPSManager->updateCollectedSessionMetrics(mSessionId);
         updateHeuristicBoost();
         if (heurRampupEnabled && mPSManager->hasValidTaskRampupMultNode()) {
             mPSManager->updateRampupBoostMode(mSessionId, mJankyLevel,
@@ -562,6 +557,7 @@ ndk::ScopedAStatus PowerHintSession<HintManagerT, PowerSessionManagerT>::reportA
 template <class HintManagerT, class PowerSessionManagerT>
 ndk::ScopedAStatus PowerHintSession<HintManagerT, PowerSessionManagerT>::sendHint(
         SessionHint hint) {
+    std::string hint_name = toString(hint);
     {
         std::scoped_lock lock{mPowerHintSessionLock};
         if (mSessionClosed) {
@@ -585,6 +581,13 @@ ndk::ScopedAStatus PowerHintSession<HintManagerT, PowerSessionManagerT>::sendHin
                 updatePidControlVariable(adpfConfig->mUclampMinLow);
                 break;
             case SessionHint::CPU_LOAD_RESET:
+                if (isTimeout() && hintSupported(kHINTNAME_APP_FIRST_FRAME)) {
+                    hint_name = kHINTNAME_APP_FIRST_FRAME;
+                    if (hintSupported(kHINTNAME_SYS_FIRST_FRAME) &&
+                        mPSManager->areAllSessionsTimeout()) {
+                        hint_name = kHINTNAME_SYS_FIRST_FRAME;
+                    }
+                }
                 updatePidControlVariable(
                         std::max(adpfConfig->mUclampMinInit,
                                  static_cast<uint32_t>(mDescriptor->pidControlVariable)),
@@ -630,7 +633,16 @@ ndk::ScopedAStatus PowerHintSession<HintManagerT, PowerSessionManagerT>::sendHin
     }
     // Don't hold a lock (mPowerHintSession) while DoHint will try to take another
     // lock(NodeLooperThread).
-    tryToSendPowerHint(toString(hint));
+    tryToSendPowerHint(hint_name, {});
+
+    // TODO(kevindubois): b/411417175 Remove this hint in favor of capacity voting around
+    // GPU_LOAD_UP after all pixel devices support this node.
+    if (hint == SessionHint::GPU_LOAD_UP &&
+        (mSessTag == SessionTag::SURFACEFLINGER ||
+         (mSessTag == SessionTag::SYSUI || mProcTag == ProcessTag::SYSTEM_UI))) {
+        tryToSendPowerHint("EXPENSIVE_RENDERING", 175ms);
+    }
+
     return ndk::ScopedAStatus::ok();
 }
 

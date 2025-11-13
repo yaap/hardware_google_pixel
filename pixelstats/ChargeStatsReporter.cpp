@@ -40,7 +40,7 @@ using android::hardware::google::pixel::PixelAtoms::ChargeStats;
 using android::hardware::google::pixel::PixelAtoms::VoltageTierStats;
 
 #define DURATION_FILTER_SECS 15
-#define CHG_STATS_FMT "%d,%d,%d, %d,%d,%d,%d %d %d,%d, %d,%d"
+#define CHG_STATS_FMT "%d,%d,%d, %d,%d,%d,%d %d %d,%d, %d,%d,%d,%d"
 #define WLC_ASTATS_FMT "A:%d,%d,%d,%d"
 #define WLC_DSTATS_FMT "D:%x,%x,%x,%x,%x, %x,%x"
 
@@ -54,7 +54,7 @@ void ChargeStatsReporter::ReportChargeStats(const std::shared_ptr<IStats> &stats
                                             const std::string line, const std::string wline_at,
                                             const std::string wline_ac,
                                             const std::string pca_line) {
-    int charge_stats_fields[] = {
+    const int charge_stats_fields[] = {
             ChargeStats::kAdapterTypeFieldNumber,
             ChargeStats::kAdapterVoltageFieldNumber,
             ChargeStats::kAdapterAmperageFieldNumber,
@@ -75,40 +75,47 @@ void ChargeStatsReporter::ReportChargeStats(const std::shared_ptr<IStats> &stats
             ChargeStats::kAacrAlgoFieldNumber,
             ChargeStats::kAacpVersionFieldNumber,
             ChargeStats::kAaccFieldNumber,
+            ChargeStats::kAafvFieldNumber,
+            ChargeStats::kMaxChargeVoltageFieldNumber,
     };
     const int32_t chg_fields_size = std::size(charge_stats_fields);
-    static_assert(chg_fields_size == 20, "Unexpected charge stats fields size");
+    static_assert(chg_fields_size == 22, "Unexpected charge stats fields size");
     const int32_t wlc_fields_size = 7;
     std::vector<VendorAtomValue> values(chg_fields_size);
     VendorAtomValue val;
     int32_t i = 0, tmp[chg_fields_size] = {0};
     int32_t pca_ac[2] = {0}, pca_rs[5] = {0}, stats_size;
+    int32_t wlc_at[4] = {0};
     std::string pdo_line, file_contents;
     std::istringstream ss;
 
     ALOGD("processing %s", line.c_str());
 
     stats_size = sscanf(line.c_str(), CHG_STATS_FMT, &tmp[0], &tmp[1], &tmp[2], &tmp[3], &tmp[4],
-                        &tmp[5], &tmp[6], &tmp[7], &tmp[8], &tmp[9], &tmp[18], &tmp[19]);
+                        &tmp[5], &tmp[6], &tmp[7], &tmp[8], &tmp[9], &tmp[18], &tmp[19], &tmp[20],
+                        &tmp[21]);
     if (stats_size != kNumChgStatsFormat00Fields && stats_size != kNumChgStatsFormat01Fields &&
-        stats_size != kNumChgStatsFormat02Fields && stats_size != kNumChgStatsFormat03Fields) {
+        stats_size != kNumChgStatsFormat02Fields && stats_size != kNumChgStatsFormat03Fields &&
+        stats_size != kNumChgStatsFormat04Fields) {
         ALOGE("Couldn't process %s (stats_size: %d)", line.c_str(), stats_size);
         return;
     }
 
     if (!wline_at.empty()) {
-        int32_t type = 0, soc = 0, voltage = 0, current = 0;
         ALOGD("wlc: processing %s", wline_at.c_str());
-        if (sscanf(wline_at.c_str(), WLC_ASTATS_FMT, &type, &soc, &voltage, &current) != 4) {
+        if (sscanf(wline_at.c_str(), WLC_ASTATS_FMT, &wlc_at[0], &wlc_at[1], &wlc_at[2],
+                   &wlc_at[3]) != 4) {
             ALOGE("Couldn't process %s", wline_at.c_str());
         } else {
-            tmp[0] = wireless_charge_stats_.TranslateSysModeToAtomValue(type);
-            tmp[1] = voltage;
-            tmp[2] = current;
+            tmp[0] = wireless_charge_stats_.TranslateSysModeToAtomValue(wlc_at[0]);
+            tmp[1] = wlc_at[2];
+            tmp[2] = wlc_at[3];
             ALOGD("wlc: processing %s", wline_ac.c_str());
             if (sscanf(wline_ac.c_str(), WLC_DSTATS_FMT, &tmp[10], &tmp[11], &tmp[12],
                        &tmp[13], &tmp[14], &tmp[15], &tmp[16]) != 7)
                 ALOGE("Couldn't process %s", wline_ac.c_str());
+            else
+                goto report_stats;
         }
     }
 
@@ -118,17 +125,14 @@ void ChargeStatsReporter::ReportChargeStats(const std::shared_ptr<IStats> &stats
                    &pca_rs[1], &pca_rs[2], &pca_rs[3], &pca_rs[4]) != 7) {
             ALOGE("Couldn't process %s", pca_line.c_str());
         } else {
+            tmp[0] = PixelAtoms::ChargeStats::ADAPTER_TYPE_USB_PD_PPS;
+            tmp[10] = pca_ac[0];
+            tmp[11] = pca_ac[1];
             tmp[12] = pca_rs[2];
             tmp[13] = pca_rs[3];
             tmp[14] = pca_rs[4];
+            tmp[15] = pca_rs[0];
             tmp[16] = pca_rs[1];
-            if (wline_at.empty()) {
-                /* force adapter type to PPS when pca log is available, but not wlc */
-                tmp[0] = PixelAtoms::ChargeStats::ADAPTER_TYPE_USB_PD_PPS;
-                tmp[10] = pca_ac[0];
-                tmp[11] = pca_ac[1];
-                tmp[15] = pca_rs[0];
-            }
         }
     }
 
@@ -152,6 +156,7 @@ void ChargeStatsReporter::ReportChargeStats(const std::shared_ptr<IStats> &stats
         ss >> tmp[17];
     }
 
+report_stats:
     for (i = 0; i < chg_fields_size; i++) {
         val.set<VendorAtomValue::intValue>(tmp[i]);
         values[charge_stats_fields[i] - kVendorAtomOffset] = val;

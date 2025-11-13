@@ -66,16 +66,17 @@ filegroup {
     srcs: ["android.hardware.power.stats-service.pixel.rc"],
 }
 
-filegroup {
+vintf_fragment {
     name: "pixel_powerstats_xml",
-    srcs: ["android.hardware.power.stats-service.pixel.xml"],
+    src: "android.hardware.power.stats-service.pixel.xml",
+    vendor: true,
 }
 
 cc_defaults {
     name: "powerstats_pixel_binary_defaults",
     defaults: ["powerstats_pixel_defaults"],
     init_rc: [":pixel_powerstats_rc"],
-    vintf_fragments: [":pixel_powerstats_xml"],
+    vintf_fragment_modules: ["pixel_powerstats_xml"],
     relative_install_path: "hw",
     proprietary: true,
     shared_libs: [

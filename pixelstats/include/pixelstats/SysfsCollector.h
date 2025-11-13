@@ -24,7 +24,6 @@
 #include "BatteryEEPROMReporter.h"
 #include "BatteryHealthReporter.h"
 #include "BatteryTTFReporter.h"
-#include "BrownoutDetectedReporter.h"
 #include "DisplayStatsReporter.h"
 #include "MitigationDurationReporter.h"
 #include "MitigationStatsReporter.h"
@@ -52,7 +51,6 @@ class SysfsCollector {
     bool ReadFileToInt(const char *path, int *val);
     void aggregatePer5Min();
     void logOnce();
-    void logBrownout();
     void logWater();
     void logPerDay();
     void logPerHour();
@@ -68,7 +66,7 @@ class SysfsCollector {
     void logSpeechDspStat(const std::shared_ptr<IStats> &stats_client);
     void logBatteryCapacity(const std::shared_ptr<IStats> &stats_client);
     void logUFSLifetime(const std::shared_ptr<IStats> &stats_client);
-    void logUFSErrorStats(const std::shared_ptr<IStats> &stats_client);
+    void logUFSErrorsCount(const std::shared_ptr<IStats> &stats_client);
     void logF2fsStats(const std::shared_ptr<IStats> &stats_client);
     void logF2fsAtomicWriteInfo(const std::shared_ptr<IStats> &stats_client);
     void logF2fsCompressionInfo(const std::shared_ptr<IStats> &stats_client);
@@ -106,12 +104,12 @@ class SysfsCollector {
     void logBatteryGMSR(const std::shared_ptr<IStats> &stats_client);
     void logDmVerityPartitionReadAmount(const std::shared_ptr<IStats> &stats_client);
     void logBatteryHistoryValidation();
+    void logUfsStorageType();
 
     BatteryEEPROMReporter battery_EEPROM_reporter_;
     MmMetricsReporter mm_metrics_reporter_;
     MitigationStatsReporter mitigation_stats_reporter_;
     MitigationDurationReporter mitigation_duration_reporter_;
-    BrownoutDetectedReporter brownout_detected_reporter_;
     ThermalStatsReporter thermal_stats_reporter_;
     DisplayStatsReporter display_stats_reporter_;
     BatteryHealthReporter battery_health_reporter_;

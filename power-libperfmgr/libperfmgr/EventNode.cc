@@ -30,11 +30,11 @@ namespace android {
 namespace perfmgr {
 
 EventNode::EventNode(
-        std::string name, std::string node_path, std::vector<RequestGroup> req_sorted,
+        std::string name, std::vector<std::string> node_paths, std::vector<RequestGroup> req_sorted,
         std::size_t default_val_index, bool reset_on_init,
-        std::function<void(const std::string &, const std::string &, const std::string &)>
+        std::function<void(const std::string &, const std::vector<std::string> &, const std::string &)>
                 update_callback)
-    : Node(std::move(name), std::move(node_path), std::move(req_sorted), default_val_index,
+    : Node(std::move(name), std::move(node_paths), std::move(req_sorted), default_val_index,
            reset_on_init),
       update_callback_(update_callback) {}
 
@@ -59,7 +59,7 @@ std::chrono::milliseconds EventNode::Update(bool) {
                     GetName() + ":" + req_value + ":" + std::to_string(expire_time.count());
             ATRACE_BEGIN(tag.c_str());
         }
-        update_callback_(name_, node_path_, req_value);
+        update_callback_(name_, node_paths_, req_value);
         current_val_index_ = value_index;
         reset_on_init_ = false;
         if (ATRACE_ENABLED()) {
@@ -71,13 +71,12 @@ std::chrono::milliseconds EventNode::Update(bool) {
 
 void EventNode::DumpToFd(int fd) const {
     const std::string &node_value = req_sorted_[current_val_index_].GetRequestValue();
-    std::string buf(android::base::StringPrintf(
-            "Node Name\t"
-            "Event Path\t"
-            "Current Index\t"
-            "Current Value\n"
-            "%s\t%s\t%zu\t%s\n",
-            name_.c_str(), node_path_.c_str(), current_val_index_, node_value.c_str()));
+    std::string buf("Node Name\tEvent Path\tCurrent Index\tCurrent Value\n");
+
+    for (const auto &path : node_paths_) {
+        buf += android::base::StringPrintf("%s\t%s\t%zu\t%s\n", name_.c_str(), path.c_str(), current_val_index_, node_value.c_str());
+    }
+
     if (!android::base::WriteStringToFd(buf, fd)) {
         LOG(ERROR) << "Failed to dump fd: " << fd;
     }

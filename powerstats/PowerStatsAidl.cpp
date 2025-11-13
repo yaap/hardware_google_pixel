@@ -136,11 +136,27 @@ ndk::ScopedAStatus PowerStats::getEnergyConsumed(const std::vector<int32_t> &in_
         return ndk::ScopedAStatus::ok();
     }
 
+    // Refresh all reading once only, to prevent refresh multiple times and
+    // putting pressure on the odpm reading in the kernel and PMIC
+    std::vector<EnergyMeasurement> energyData;
+    readEnergyMeter({}, &energyData);
+
+    return getEnergyConsumed(in_energyConsumerIds, energyData, _aidl_return);
+}
+
+ndk::ScopedAStatus PowerStats::getEnergyConsumed(
+        const std::vector<int32_t> &in_energyConsumerIds,
+        const std::vector<EnergyMeasurement> &in_energyMeasurement,
+        std::vector<EnergyConsumerResult> *_aidl_return) {
+    if (mEnergyConsumers.empty()) {
+        return ndk::ScopedAStatus::ok();
+    }
+
     // If in_powerEntityIds is empty then return data for all supported energy consumers
     if (in_energyConsumerIds.empty()) {
         std::vector<int32_t> v(mEnergyConsumerInfos.size());
         std::iota(std::begin(v), std::end(v), 0);
-        return getEnergyConsumed(v, _aidl_return);
+        return getEnergyConsumed(v, in_energyMeasurement, _aidl_return);
     }
 
     for (const auto id : in_energyConsumerIds) {
@@ -149,7 +165,7 @@ ndk::ScopedAStatus PowerStats::getEnergyConsumed(const std::vector<int32_t> &in_
             return ndk::ScopedAStatus(AStatus_fromExceptionCode(EX_ILLEGAL_ARGUMENT));
         }
 
-        auto resopt = mEnergyConsumers[id]->getEnergyConsumed();
+        auto resopt = mEnergyConsumers[id]->getEnergyConsumed(in_energyMeasurement);
         if (resopt) {
             EnergyConsumerResult res = resopt.value();
             res.id = id;
@@ -220,7 +236,8 @@ void PowerStats::getChannelNames(std::unordered_map<int32_t, std::string> *chann
     }
 }
 
-void PowerStats::dumpEnergyMeter(std::ostringstream &oss, bool delta) {
+void PowerStats::dumpEnergyMeter(std::ostringstream &oss, bool delta,
+                                 const std::vector<EnergyMeasurement> &energyData) {
     const char *headerFormat = "  %32s   %18s\n";
     const char *dataFormat = "  %32s   %14.2f mWs\n";
     const char *headerFormatDelta = "  %32s   %18s (%14s)\n";
@@ -230,9 +247,6 @@ void PowerStats::dumpEnergyMeter(std::ostringstream &oss, bool delta) {
     getChannelNames(&channelNames);
 
     oss << "\n============= PowerStats HAL 2.0 energy meter ==============\n";
-
-    std::vector<EnergyMeasurement> energyData;
-    readEnergyMeter({}, &energyData);
 
     if (delta) {
         static std::vector<EnergyMeasurement> prevEnergyData;
@@ -373,11 +387,12 @@ void PowerStats::dumpStateResidency(std::ostringstream &oss, bool delta) {
     oss << "========== End of PowerStats HAL 2.0 state residencies ==========\n";
 }
 
-void PowerStats::dumpEnergyConsumer(std::ostringstream &oss, bool delta) {
+void PowerStats::dumpEnergyConsumer(std::ostringstream &oss, bool delta,
+                                    const std::vector<EnergyMeasurement> &energyData) {
     (void)delta;
 
     std::vector<EnergyConsumerResult> results;
-    getEnergyConsumed({}, &results);
+    getEnergyConsumed({}, energyData, &results);
 
     oss << "\n============= PowerStats HAL 2.0 energy consumers ==============\n";
 
@@ -401,11 +416,16 @@ binder_status_t PowerStats::dump(int fd, const char **args, uint32_t numArgs) {
     // Generate debug output for state residency
     dumpStateResidency(oss, delta);
 
+    // Refresh all reading once only, to prevent refresh multiple times and
+    // putting pressure on the odpm reading in the kernel and PMIC
+    std::vector<EnergyMeasurement> energyData;
+    readEnergyMeter({}, &energyData);
+
     // Generate debug output for energy consumer
-    dumpEnergyConsumer(oss, delta);
+    dumpEnergyConsumer(oss, delta, energyData);
 
     // Generate debug output energy meter
-    dumpEnergyMeter(oss, delta);
+    dumpEnergyMeter(oss, delta, energyData);
 
     ::android::base::WriteStringToFd(oss.str(), fd);
     fsync(fd);

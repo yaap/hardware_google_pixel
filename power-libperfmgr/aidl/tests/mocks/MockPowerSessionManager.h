@@ -37,7 +37,7 @@ class MockPowerSessionManager {
                 (const std::string &idString,
                  const std::shared_ptr<impl::pixel::AppHintDesc> &sessionDescriptor,
                  const std::shared_ptr<impl::pixel::AppDescriptorTrace> &sessionTrace,
-                 const std::vector<int32_t> &threadIds),
+                 const bool enableMetricCollection, const std::vector<int32_t> &threadIds),
                 ());
     MOCK_METHOD(void, removePowerSession, (int64_t sessionId), ());
     MOCK_METHOD(void, setThreadsFromPowerSession,
@@ -73,12 +73,14 @@ class MockPowerSessionManager {
                 ());
     MOCK_METHOD(bool, getGameModeEnableState, (), ());
     MOCK_METHOD(bool, hasValidTaskRampupMultNode, (), ());
-    MOCK_METHOD(void, updateFrameBuckets,
-                (int64_t sessionId, const impl::pixel::FrameBuckets &lastReportedFrames), ());
+    MOCK_METHOD(void, updateFrameMetrics,
+                (int64_t sessionId, const impl::pixel::FrameTimingMetrics &lastReportedFrames), ());
     MOCK_METHOD(void, updateRampupBoostMode,
                 (int64_t sessionId, impl::pixel::SessionJankyLevel jankyLevel,
                  int32_t defaultRampupVal, int32_t highRampupVal),
                 ());
+    MOCK_METHOD(void, updateCollectedSessionMetrics, (int64_t sessionId), ());
+    MOCK_METHOD(bool, areAllSessionsTimeout, (), ());
 
     static testing::NiceMock<MockPowerSessionManager> *getInstance() {
         static testing::NiceMock<MockPowerSessionManager> instance{};

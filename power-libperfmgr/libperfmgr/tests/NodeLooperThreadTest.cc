@@ -35,13 +35,13 @@ class NodeLooperThreadTest : public ::testing::Test {
     virtual void SetUp() {
         std::unique_ptr<TemporaryFile> tf = std::make_unique<TemporaryFile>();
         nodes_.emplace_back(new FileNode(
-            "n0", tf->path, {{"n0_value0"}, {"n0_value1"}, {"n0_value2"}}, 2,
-            false, false));
+            "n0", {tf->path}, {{"n0_value0"}, {"n0_value1"}, {"n0_value2"}}, 2,
+            false, false, false));
         files_.emplace_back(std::move(tf));
         tf = std::make_unique<TemporaryFile>();
         nodes_.emplace_back(new FileNode(
-            "n1", tf->path, {{"n1_value0"}, {"n1_value1"}, {"n1_value2"}}, 2,
-            true, true));
+            "n1", {tf->path}, {{"n1_value0"}, {"n1_value1"}, {"n1_value2"}}, 2,
+            true, true, false));
         files_.emplace_back(std::move(tf));
     }
 

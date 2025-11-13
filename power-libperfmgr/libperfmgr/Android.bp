@@ -24,6 +24,7 @@ cc_defaults {
     shared_libs: [
         "libbase",
         "libcutils",
+        "libprocessgroup",
         "libutils",
     ],
     static_libs: [
@@ -60,6 +61,7 @@ cc_library {
         "HintManager.cc",
         "AdpfConfig.cc",
         "EventNode.cc",
+        "JobQueueManager.cc",
     ],
 }
 
@@ -77,6 +79,7 @@ cc_test {
         "tests/NodeLooperThreadTest.cc",
         "tests/HintManagerTest.cc",
         "tests/EventNodeTest.cc",
+        "tests/JobQueueManagerTest.cc",
     ],
     test_suites: [
         "device-tests",

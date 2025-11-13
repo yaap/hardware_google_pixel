@@ -26,6 +26,7 @@ namespace hardware {
 namespace google {
 namespace pixel {
 
+std::vector<int> readIntVectorFromJson(const Json::Value &jsonArr);
 std::vector<std::string> readStringVectorFromJson(const Json::Value &jsonArr);
 std::vector<std::pair<std::string, std::string>> readStringPairVectorFromJson(const Json::Value &jsonArr);
 std::string getCStringOrDefault(const Json::Value configData, const std::string& key);
