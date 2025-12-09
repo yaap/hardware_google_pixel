@@ -193,12 +193,10 @@ bool MmMetricsReporter::checkKernelOomUsageSupport() {
 bool MmMetricsReporter::checkKernelGcmaSupport() {
     std::string base_path(kGcmaBasePath);
 
-    for (auto parr : {kGcmaHourlySimpleKnobs, kGcmaHourlyHistogramKnobs}) {
-        for (auto p : kGcmaHourlySimpleKnobs) {
-            if (!file_exists((base_path + '/' + p).c_str())) {
-                ALOGE("kernel GCMA metrics not supported- %s not found.", p);
-                return false;
-            }
+    for (auto p : kGcmaHourlySimpleKnobs) {
+        if (!file_exists((base_path + '/' + p).c_str())) {
+            ALOGE("kernel GCMA metrics not supported- %s not found.", p);
+            return false;
         }
     }
     return true;

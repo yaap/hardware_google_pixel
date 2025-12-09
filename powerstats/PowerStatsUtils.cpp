@@ -16,6 +16,8 @@
 
 #include <pixelpowerstats/PowerStatsUtils.h>
 
+#include <cstdlib>
+
 namespace android {
 namespace hardware {
 namespace google {

@@ -14,7 +14,8 @@
      limitations under the License.
 -->
 <configuration description="Runs Tests for PixelAtoms">
-    <test class="com.android.tradefed.testtype.HostTest" >
+    <option name="null-device" value="true" />
+    <test class="com.android.tradefed.testtype.IsolatedHostTest">
         <option name="jar" value="PixelAtomsTest.jar" />
     </test>
 </configuration>

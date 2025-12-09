@@ -244,7 +244,7 @@ void reportUsbDataSessionEvent(const std::shared_ptr<IStats> &stats_client,
         ALOGE("Unable to report VendorUsbDataSessionEvent to Stats service");
 }
 
-void readLogbuffer(const std::string &buf_path, int num_fields, uint16_t code,
+void readLogbuffer(const std::string &buf_path, std::vector<int32_t> fields, uint16_t code,
                    enum ReportEventFormat format, unsigned int last_check_time,
                    std::vector<std::vector<uint32_t>> &events) {
     std::istringstream ss;
@@ -253,7 +253,13 @@ void readLogbuffer(const std::string &buf_path, int num_fields, uint16_t code,
     unsigned int ts, addr, val;
     unsigned int reported = 0;
     uint16_t type;
-    std::vector<uint32_t> vect(num_fields);
+
+    if (fields.empty())
+        return;
+
+    auto max_iter = std::max_element(fields.begin(), fields.end());
+    uint32_t max_field = *max_iter;
+    std::vector<uint32_t> vect(max_field);
 
     if (!ReadFileToString(buf_path, &file_contents)) {
         ALOGE("Unable to read logbuffer path: %s - %s", buf_path.c_str(), strerror(errno));
@@ -272,10 +278,10 @@ void readLogbuffer(const std::string &buf_path, int num_fields, uint16_t code,
         }
 
         std::fill(vect.begin(), vect.end(), 0);
-        for (field_idx = 0; field_idx < num_fields; field_idx++, pos += read) {
+        for (field_idx = 0; field_idx < max_field; field_idx++, pos += read) {
             if (format == FormatAddrWithVal) {
                 num = sscanf(&line.c_str()[pos], "%x:%x%n", &addr, &val, &read);
-                if (num != 2 || (num_fields - field_idx < 2))
+                if (num != 2 || (max_field - field_idx < 2))
                     break;
                 vect[field_idx++] = addr;
                 vect[field_idx] = val;
@@ -294,9 +300,11 @@ void readLogbuffer(const std::string &buf_path, int num_fields, uint16_t code,
             }
         }
 
-        if (field_idx == num_fields || format == FormatOnlyVal)
+        // Add to events if field_idx is one of the fields we are interested in
+        if (std::find(fields.begin(), fields.end(), field_idx) != fields.end())
             events.push_back(vect);
     }
+
     if (events.size() > 0 || reported > 0)
         ALOGD("0x%04X: new:%zu, reported:%d", code, events.size(), reported);
 

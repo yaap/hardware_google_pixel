@@ -61,11 +61,21 @@ struct HintStatus {
 enum class HintActionType { Node, DoHint, EndHint, MaskHint };
 
 struct HintAction {
-    HintAction(HintActionType t, const std::string &v, const std::string &p)
-        : type(t), value(v), enable_property(p) {}
+    HintAction(HintActionType t, const std::string &v, const std::string &p, const std::string &eh,
+               const std::string &dh)
+        : type(t), value(v), enable_property(p) {
+        if (!eh.empty()) {
+            enable_flag = FlagProvider::GetInstance().GetterFromString(eh);
+        }
+        if (!dh.empty()) {
+            disable_flag = FlagProvider::GetInstance().GetterFromString(dh);
+        }
+    }
     HintActionType type;
     std::string value;
     std::string enable_property;
+    bool (*enable_flag)() = nullptr;
+    bool (*disable_flag)() = nullptr;
 };
 
 struct Hint {
@@ -86,6 +96,7 @@ struct OtherConfigs {
     std::optional<std::string> GPUSysfsPath;
     std::optional<bool> enableMetricCollection;
     std::optional<uint32_t> maxNumOfCachedSessionMetrics;
+    bool enableSFPreferHighCap = false;
 };
 
 // HintManager is the external interface of the library to be used by PowerHAL
@@ -207,7 +218,8 @@ class HintManager {
     static std::unique_ptr<HintManager> sInstance;
 
     // Hint Update Callback
-    void OnNodeUpdate(const std::string &name, const std::vector<std::string> &paths, const std::string &value);
+    void OnNodeUpdate(const std::string &name, const std::vector<std::string> &paths,
+                      const std::string &value);
     // set ADPF config by hint name.
     std::unordered_map<std::string, std::vector<AdpfCallback *>> tag_update_callback_list_;
     // Other configurations

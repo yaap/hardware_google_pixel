@@ -40,7 +40,7 @@ using android::hardware::google::pixel::PixelAtoms::ChargeStats;
 using android::hardware::google::pixel::PixelAtoms::VoltageTierStats;
 
 #define DURATION_FILTER_SECS 15
-#define CHG_STATS_FMT "%d,%d,%d, %d,%d,%d,%d %d %d,%d, %d,%d,%d,%d"
+#define CHG_STATS_FMT "%d,%d,%d, %d,%d,%d,%d %d %d,%d, %d,%d,%d,%d,%d"
 #define WLC_ASTATS_FMT "A:%d,%d,%d,%d"
 #define WLC_DSTATS_FMT "D:%x,%x,%x,%x,%x, %x,%x"
 
@@ -77,10 +77,10 @@ void ChargeStatsReporter::ReportChargeStats(const std::shared_ptr<IStats> &stats
             ChargeStats::kAaccFieldNumber,
             ChargeStats::kAafvFieldNumber,
             ChargeStats::kMaxChargeVoltageFieldNumber,
+            ChargeStats::kAaccChgCcFieldNumber,
     };
     const int32_t chg_fields_size = std::size(charge_stats_fields);
-    static_assert(chg_fields_size == 22, "Unexpected charge stats fields size");
-    const int32_t wlc_fields_size = 7;
+    static_assert(chg_fields_size == 23, "Unexpected charge stats fields size");
     std::vector<VendorAtomValue> values(chg_fields_size);
     VendorAtomValue val;
     int32_t i = 0, tmp[chg_fields_size] = {0};
@@ -93,10 +93,10 @@ void ChargeStatsReporter::ReportChargeStats(const std::shared_ptr<IStats> &stats
 
     stats_size = sscanf(line.c_str(), CHG_STATS_FMT, &tmp[0], &tmp[1], &tmp[2], &tmp[3], &tmp[4],
                         &tmp[5], &tmp[6], &tmp[7], &tmp[8], &tmp[9], &tmp[18], &tmp[19], &tmp[20],
-                        &tmp[21]);
+                        &tmp[21], &tmp[22]);
     if (stats_size != kNumChgStatsFormat00Fields && stats_size != kNumChgStatsFormat01Fields &&
         stats_size != kNumChgStatsFormat02Fields && stats_size != kNumChgStatsFormat03Fields &&
-        stats_size != kNumChgStatsFormat04Fields) {
+        stats_size != kNumChgStatsFormat04Fields && stats_size != kNumChgStatsFormat05Fields) {
         ALOGE("Couldn't process %s (stats_size: %d)", line.c_str(), stats_size);
         return;
     }

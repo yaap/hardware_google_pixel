@@ -64,6 +64,7 @@ TEST_F(SessionRecordsTest, NoRecords) {
     ASSERT_FALSE(mRecords->getMaxDuration().has_value());
     ASSERT_FALSE(mRecords->getAvgDuration().has_value());
     ASSERT_EQ(0, mRecords->getNumOfMissedCycles());
+    ASSERT_FALSE(mRecords->areAllRecordsInitialized());
 }
 
 TEST_F(SessionRecordsTest, addReportedDurations) {
@@ -73,6 +74,15 @@ TEST_F(SessionRecordsTest, addReportedDurations) {
     ASSERT_EQ(MS_TO_US(4), mRecords->getMaxDuration().value());
     ASSERT_EQ(MS_TO_US(3), mRecords->getAvgDuration().value());
     ASSERT_EQ(0, mRecords->getNumOfMissedCycles());
+    ASSERT_FALSE(mRecords->areAllRecordsInitialized());
+
+    // Push one more record to fill the ring buffer
+    mRecords->addReportedDurations(fakeWorkDurations({3}), MS_TO_NS(3), buckets);
+    ASSERT_EQ(5, mRecords->getNumOfRecords());
+    ASSERT_EQ(MS_TO_US(4), mRecords->getMaxDuration().value());
+    ASSERT_EQ(MS_TO_US(3), mRecords->getAvgDuration().value());
+    ASSERT_EQ(0, mRecords->getNumOfMissedCycles());
+    ASSERT_TRUE(mRecords->areAllRecordsInitialized());
 
     // Push more records to override part of the old ones in the ring buffer
     mRecords->addReportedDurations(fakeWorkDurations({2, 1, 2}), MS_TO_NS(3), buckets);
@@ -80,6 +90,7 @@ TEST_F(SessionRecordsTest, addReportedDurations) {
     ASSERT_EQ(MS_TO_US(3), mRecords->getMaxDuration().value());
     ASSERT_EQ(MS_TO_US(2), mRecords->getAvgDuration().value());
     ASSERT_EQ(0, mRecords->getNumOfMissedCycles());
+    ASSERT_TRUE(mRecords->areAllRecordsInitialized());
 
     // More records to override the ring buffer more rounds
     mRecords->addReportedDurations(fakeWorkDurations({10, 2, 9, 8, 4, 5, 7, 6}), MS_TO_NS(3),
@@ -88,6 +99,7 @@ TEST_F(SessionRecordsTest, addReportedDurations) {
     ASSERT_EQ(MS_TO_US(8), mRecords->getMaxDuration().value());
     ASSERT_EQ(MS_TO_US(6), mRecords->getAvgDuration().value());
     ASSERT_EQ(4, mRecords->getNumOfMissedCycles());
+    ASSERT_TRUE(mRecords->areAllRecordsInitialized());
 }
 
 TEST_F(SessionRecordsTest, checkLowFrameRate) {
@@ -120,6 +132,7 @@ TEST_F(SessionRecordsTest, switchTargetDuration) {
     ASSERT_EQ(MS_TO_US(19), mRecords->getMaxDuration().value());
     ASSERT_EQ(MS_TO_US(11), mRecords->getAvgDuration().value());
     ASSERT_EQ(1, mRecords->getNumOfMissedCycles());
+    ASSERT_FALSE(mRecords->areAllRecordsInitialized());
 
     // Change the target duration. It will reset all the old record states.
     mRecords->resetRecords();
@@ -128,6 +141,7 @@ TEST_F(SessionRecordsTest, switchTargetDuration) {
     ASSERT_FALSE(mRecords->getAvgDuration().has_value());
     ASSERT_EQ(0, mRecords->getNumOfMissedCycles());
     ASSERT_FALSE(mRecords->isLowFrameRate(25));
+    ASSERT_FALSE(mRecords->areAllRecordsInitialized());
 
     mRecords->addReportedDurations(fakeWorkDurations({{50, 14}, {70, 16}}), MS_TO_NS(20), buckets);
     ASSERT_EQ(2, mRecords->getNumOfRecords());
@@ -135,6 +149,7 @@ TEST_F(SessionRecordsTest, switchTargetDuration) {
     ASSERT_EQ(MS_TO_US(15), mRecords->getAvgDuration().value());
     ASSERT_EQ(0, mRecords->getNumOfMissedCycles());
     ASSERT_FALSE(mRecords->isLowFrameRate(25));
+    ASSERT_FALSE(mRecords->areAllRecordsInitialized());
 }
 
 TEST_F(SessionRecordsTest, checkFPSJitters) {

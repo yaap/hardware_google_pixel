@@ -148,7 +148,21 @@ constexpr char kJSON_RAW[] = R"(
             "PowerHint": "DO_LAUNCH_MODE",
             "Type": "DoHint",
             "Value": "LAUNCH"
-        }
+        },
+        {
+            "PowerHint": "ENABLE_FLAG_ACTION",
+            "Node": "ModeProperty",
+            "Value": "LOW",
+            "EnableFlag": "test_flag",
+            "Duration": 0
+        },
+        {
+            "PowerHint": "DISABLE_FLAG_ACTION",
+            "Node": "ModeProperty",
+            "Value": "LOW",
+            "DisableFlag": "test_flag",
+            "Duration": 0
+        },
     ]
 }
 )";
@@ -293,7 +307,8 @@ constexpr char kJSON_ADPF[] = R"(
     "GpuSysfsPath" : "/sys/devices/platform/123.abc",
     "OtherConfigs": {
         "EnableMetricCollection": true,
-        "MaxNumOfCachedSessionMetrics": 100
+        "MaxNumOfCachedSessionMetrics": 100,
+        "EnableSFPreferHighCap": true
     }
 }
 )";
@@ -373,6 +388,12 @@ class HintManagerTest : public ::testing::Test, public HintManager {
     {                                                         \
         std::string s = android::base::GetProperty(path, ""); \
         EXPECT_EQ(expected_value, s);                         \
+    }
+
+#define VERIFY_PROPERTY_VALUE_NE(path, expected_value)        \
+    {                                                         \
+        std::string s = android::base::GetProperty(path, ""); \
+        EXPECT_NE(expected_value, s);                         \
     }
 
 #define VERIFY_PATH_VALUE(path, expected_value)                                    \
@@ -663,7 +684,7 @@ TEST_F(HintManagerTest, ParseBadFileNodesTest) {
 TEST_F(HintManagerTest, ParseActionsTest) {
     std::vector<std::unique_ptr<Node>> nodes = HintManager::ParseNodes(json_doc_);
     std::unordered_map<std::string, Hint> actions = HintManager::ParseActions(json_doc_, nodes);
-    EXPECT_EQ(7u, actions.size());
+    EXPECT_EQ(9u, actions.size());
 
     EXPECT_EQ(2u, actions["INTERACTION"].node_actions.size());
     EXPECT_EQ(1u, actions["INTERACTION"].node_actions[0].node_index);
@@ -1156,6 +1177,7 @@ TEST_F(HintManagerTest, OtherConfigs) {
     EXPECT_EQ(other_configs.GPUSysfsPath, "/sys/devices/platform/123.abc");
     EXPECT_TRUE(other_configs.enableMetricCollection);
     EXPECT_EQ(other_configs.maxNumOfCachedSessionMetrics, 100);
+    EXPECT_TRUE(other_configs.enableSFPreferHighCap);
 
     // Without other configurations
     ASSERT_TRUE(android::base::WriteStringToFile(kJSON_RAW, json_file.path)) << strerror(errno);
@@ -1166,6 +1188,47 @@ TEST_F(HintManagerTest, OtherConfigs) {
     EXPECT_EQ(other_configs.GPUSysfsPath, std::nullopt);
     EXPECT_EQ(other_configs.enableMetricCollection, std::nullopt);
     EXPECT_EQ(other_configs.maxNumOfCachedSessionMetrics, std::nullopt);
+    EXPECT_FALSE(other_configs.enableSFPreferHighCap);
+}
+
+TEST_F(HintManagerTest, EnableFlag) {
+    TemporaryFile json_file;
+    ASSERT_TRUE(android::base::WriteStringToFile(kJSON_RAW, json_file.path)) << strerror(errno);
+    HintManager *hm = HintManager::GetFromJSON(json_file.path, true);
+    FlagProvider::GetInstance().ClearOverrides();
+    EXPECT_TRUE(hm->IsRunning());
+
+    // If there is an enable flag, but it is off, do nothing
+    FlagProvider::GetInstance().OverrideValue(powerhal::flags::test_flag, false);
+    hm->DoHint("ENABLE_FLAG_ACTION");
+    std::this_thread::sleep_for(200ms);
+    VERIFY_PROPERTY_VALUE_NE(prop_, "LOW");
+
+    // If there is an enable flag, and it is on, the hint should work
+    FlagProvider::GetInstance().OverrideValue(powerhal::flags::test_flag, true);
+    hm->DoHint("ENABLE_FLAG_ACTION");
+    std::this_thread::sleep_for(200ms);
+    VERIFY_PROPERTY_VALUE(prop_, "LOW");
+}
+
+TEST_F(HintManagerTest, DisableFlag) {
+    TemporaryFile json_file;
+    ASSERT_TRUE(android::base::WriteStringToFile(kJSON_RAW, json_file.path)) << strerror(errno);
+    HintManager *hm = HintManager::GetFromJSON(json_file.path, true);
+    FlagProvider::GetInstance().ClearOverrides();
+    EXPECT_TRUE(hm->IsRunning());
+
+    // If there is a disable flag, and it is on, do nothing
+    FlagProvider::GetInstance().OverrideValue(powerhal::flags::test_flag, true);
+    hm->DoHint("DISABLE_FLAG_ACTION");
+    std::this_thread::sleep_for(200ms);
+    VERIFY_PROPERTY_VALUE_NE(prop_, "LOW");
+
+    // If there is a disable flag, but it is off, the hint should work
+    FlagProvider::GetInstance().OverrideValue(powerhal::flags::test_flag, false);
+    hm->DoHint("DISABLE_FLAG_ACTION");
+    std::this_thread::sleep_for(200ms);
+    VERIFY_PROPERTY_VALUE(prop_, "LOW");
 }
 
 }  // namespace perfmgr

@@ -26,9 +26,12 @@ cc_defaults {
         "libcutils",
         "libprocessgroup",
         "libutils",
+        "liblog",
     ],
     static_libs: [
         "libjsoncpp",
+        "libaconfig_storage_read_api_cc",
+        "powerhal_flags-aconfig-cc",
     ],
     cflags: [
         "-Wall",
@@ -62,6 +65,7 @@ cc_library {
         "AdpfConfig.cc",
         "EventNode.cc",
         "JobQueueManager.cc",
+        "FlagProvider.cc",
     ],
 }
 
@@ -80,6 +84,7 @@ cc_test {
         "tests/HintManagerTest.cc",
         "tests/EventNodeTest.cc",
         "tests/JobQueueManagerTest.cc",
+        "tests/FlagProviderTest.cc",
     ],
     test_suites: [
         "device-tests",
@@ -91,7 +96,10 @@ cc_test {
 cc_binary {
     name: "perfmgr_config_verifier",
     defaults: ["libperfmgr_defaults"],
-    static_libs: ["libperfmgr"],
+    static_libs: [
+        "libperfmgr",
+        "powerhal_flags-aconfig-cc",
+    ],
     srcs: [
         "tools/ConfigVerifier.cc",
     ],

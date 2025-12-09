@@ -68,3 +68,10 @@ PRODUCT_PACKAGES += com.android.hardware.biometrics.face.virtual
 ifeq ($(RELEASE_INSTALL_AI_LABS_ARTIFACTS), true)
   include vendor/google/AILabs/ai_labs.mk
 endif
+
+# Enable profile code in dexpreopt
+ALLOW_PROFILE_CODE = true
+
+# Set the property for on-device compilation.
+PRODUCT_PROPERTY_OVERRIDES += \
+    dalvik.vm.allow_profile_code=true

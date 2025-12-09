@@ -2,6 +2,7 @@ Actions
 AdpfConfig
 DefaultIndex
 Duration
+EnableSFPreferHighCap
 GpuBoost
 GpuCapacityBoostMax
 GpuSysfsPath
@@ -19,6 +20,7 @@ Name
 Name
 Node
 Nodes
+OtherConfigs
 Path
 PID_Do
 PID_Du

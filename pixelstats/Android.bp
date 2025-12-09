@@ -167,6 +167,7 @@ cc_library {
         "MitigationStatsReporter.cpp",
         "MitigationDurationReporter.cpp",
         "PcaChargeStats.cpp",
+        "SSRestartReporter.cpp",
         "StatsHelper.cpp",
         "SysfsCollector.cpp",
         "ThermalStatsReporter.cpp",

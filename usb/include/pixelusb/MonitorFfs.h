@@ -68,6 +68,13 @@ class MonitorFfs {
     const char *const mGadgetName;
     // Monitor State
     bool mMonitorRunning;
+    // Represents whether all the functionfs endpoints are present
+    bool mFfsEndpointsPresent;
+    // True implies controller name write to configfs UDC node is pending
+    bool mWriteUdc;
+    // Caches the last error reported when writing to UDC node
+    // Empty when the last attempt succeeded
+    int mWriteUdcLastError;
 
   public:
     MonitorFfs(const char *const gadget);
@@ -88,6 +95,9 @@ class MonitorFfs {
     void registerFunctionsAppliedCallback(void (*callback)(bool functionsApplied, void *(payload)),
                                           void *payload);
     bool isMonitorRunning();
+    // check whether USB gadget is enabled or not
+    bool isUsbGadgetMode();
+    void dump(int fd);
     // Ep monitoring and the gadget pull up logic.
     static void *startMonitorFd(void *param);
 };

@@ -15,15 +15,16 @@
  */
 
 #include "include/PowerStatsAidl.h"
-#include <aidl/android/hardware/power/stats/BnPowerStats.h>
 
+#include <aidl/android/hardware/power/stats/BnPowerStats.h>
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
-
 #include <inttypes.h>
+
+#include <algorithm>
 #include <chrono>
 #include <numeric>
 #include <string>

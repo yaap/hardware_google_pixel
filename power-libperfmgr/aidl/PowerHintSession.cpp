@@ -24,6 +24,7 @@
 #include <android-base/parsedouble.h>
 #include <android-base/properties.h>
 #include <android-base/stringprintf.h>
+#include <powerhal_flags.h>
 #include <private/android_filesystem_config.h>
 #include <sys/syscall.h>
 #include <time.h>
@@ -369,8 +370,7 @@ SessionJankyLevel PowerHintSession<HintManagerT, PowerSessionManagerT>::updateSe
         bool isLowFPS) {
     SessionJankyLevel newState = SessionJankyLevel::LIGHT;
     if (isLowFPS) {
-        newState = SessionJankyLevel::LIGHT;
-        return newState;
+        return SessionJankyLevel::LIGHT;
     }
 
     auto adpfConfig = getAdpfProfile();

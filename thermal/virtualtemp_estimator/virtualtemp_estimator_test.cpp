@@ -38,6 +38,7 @@
 #include <string.h>
 #include <sys/time.h>
 
+#include <algorithm>
 #include <climits>
 #include <fstream>
 #include <iostream>

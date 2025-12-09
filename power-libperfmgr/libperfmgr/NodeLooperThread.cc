@@ -114,6 +114,10 @@ bool NodeLooperThread::threadLoop() {
                 ATRACE_END();
                 continue;
             }
+            if ((a.enable_flag != nullptr && !a.enable_flag()) ||
+                (a.disable_flag != nullptr && a.disable_flag())) {
+                continue;
+            }
             if (a.node_index >= nodes_.size()) {
                 LOG(ERROR) << "Node index out of bound: " << a.node_index
                            << " ,size: " << nodes_.size();

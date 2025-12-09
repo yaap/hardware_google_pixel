@@ -40,26 +40,8 @@ class BatteryEEPROMReporter {
     void checkAndReportGMSR(const std::shared_ptr<IStats> &stats_client, const std::vector<std::string> &paths);
     void checkAndReportMaxfgHistory(const std::shared_ptr<IStats> &stats_client,
                                     const std::string &path);
-    void checkAndReportFGLearning(const std::shared_ptr<IStats> &stats_client,
-                                  const std::vector<std::string> &paths);
-    void checkAndReportFGModelLoading(const std::shared_ptr<IStats> &stats_client,
-                                      const std::vector<std::string> &paths);
-    void checkAndReportHistValid(const std::shared_ptr<IStats> &stats_client,
-                                  const std::vector<std::string> &paths);
 
   private:
-
-    /* The number of elements for relaxation event */
-    const int kNumFGLearningFieldsV2 = 16;
-    /* with additional unix time field */
-    const int kNumFGLearningFieldsV3 = 17;
-    /* with COTRIM/COFF/LOCK fields */
-    const int kNumFGLearningFieldsV4 = 21;
-    unsigned int last_lh_check_ = 0;
-    /* The number of elements for history validation event */
-    const int kNumValidationFields = 4;
-    const int kNumValidationFieldsV2 = 10;
-    unsigned int last_hv_check_ = 0;
     int last_cycle_count = 0;
 
     /* P21+ history format */
@@ -107,6 +89,7 @@ class BatteryEEPROMReporter {
     };
 
     int64_t report_time_ = 0;
+    int64_t report_time_maxfg_ = 0;
     int64_t getTimeSecs();
 
     void reportEvent(const std::shared_ptr<IStats> &stats_client,
@@ -121,6 +104,7 @@ class BatteryEEPROMReporter {
     const int kNumEEPROMPipelineFields = sizeof(BatteryEEPROMPipeline) / sizeof(int32_t);
 
     const std::string kBatteryPairingPath = "/sys/class/power_supply/battery/pairing_state";
+    const std::string kBatteryCycleCountPath = "/sys/class/power_supply/battery/cycle_count";
 };
 
 }  // namespace pixel

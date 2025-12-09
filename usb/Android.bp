@@ -184,3 +184,19 @@ cc_aconfig_library {
     vendor: true,
     aconfig_declarations: "android.hardware.usb.flags-aconfig",
 }
+
+cc_binary {
+    name: "usb_accessory_utils",
+    srcs: ["UsbAccessoryUtils.cpp"],
+    shared_libs: [
+        "android.hardware.usb.flags-aconfig-cc-lib",
+        "libbase",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wextra",
+        "-Wunused",
+    ],
+    vendor: true,
+}

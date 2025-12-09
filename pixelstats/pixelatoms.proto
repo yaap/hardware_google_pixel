@@ -149,6 +149,8 @@ message Atom {
       StorageUfsErrorCountReported storage_ufs_error_count_reported = 105095;
       UfsStorageTypeReported ufs_storage_type_reported = 105096;
       ThermalTjTripCountReported thermal_tj_trip_count_reported = 105097;
+      BatteryFuelGaugeReported battery_fuel_gauge_reported = 105098;
+      SubsystemRestartCrashReported subsystem_restart_crash_reported = 105099;
     }
     // AOSP atom ID range ends at 109999
     reserved 105077; // moved GpuFrequencyTimeInStatePerUidReported
@@ -256,6 +258,7 @@ message ChargeStats {
     optional int32 aacc = 21;
     optional int32 aafv = 22;
     optional int32 max_charge_voltage = 23;
+    optional int32 aacc_chg_cc = 24;
 }
 
 /* A message containing stats from each charge voltage tier. */
@@ -3031,6 +3034,9 @@ enum AudioUseCase {
   // voice call use case
   VOICE_CALL_DOWNLINK = 27;
   VOICE_CALL_UPLINK = 28;
+
+  // Additional use case
+  MMAP_PCM_OFFLOAD_PLAYBACK = 29;
 }
 
 /* Audio source with the original enum value. */
@@ -3601,4 +3607,57 @@ message ThermalTjTripCountReported {
   optional int32 trip_number = 3;
   /* The number of times the trip occurred. */
   optional int32 trip_count = 4;
+}
+
+/*
+ * A message containing fuel gauge events
+ * Logged from:
+ *    hardware/google/pixel/pixelstats/BatteryFGReporter.cpp
+ */
+message BatteryFuelGaugeReported {
+  /* Vendor reverse domain name */
+  optional string reverse_domain_name = 1;
+
+  enum BatteryFgIndex {
+    UNKNOWN = 0;
+    PRIMARY = 1;
+    SECONDARY = 2;
+  }
+
+  /* battery fuel gauge logging time */
+  optional int64 unix_time_sec = 2;
+  /* specifies the identifier for the data */
+  optional int32 data_type = 3;
+  /* conditions for triggering */
+  optional int32 data_event = 4;
+  /* Specifies the FG index for battery configurations  */
+  optional BatteryFgIndex fg_index = 5;
+
+  /* fg registers at the time of the type/event/index */
+  repeated int32 fg_data = 6;
+}
+
+/*
+ * Collects and reports crashes collected by SSRestart service.
+ * Logged from:
+ *   hardware/google/pixel/pixelstats/SSRestartReporter.cpp
+ *
+ * Estimated Logging Rate:
+ * Peak: 10 times in 24 hours | Avg: 1 times per device per day
+ */
+message SubsystemRestartCrashReported {
+  /* Vendor reverse domain name, reserved and deprecated. */
+  optional string reverse_domain_name = 1;
+
+  enum SSRestartCrashReason {
+    UNKNOWN = 0;
+    U100_POWER_ON_ERR = 1;
+    U100_COREDUMP = 2;
+    VPU_CRASH = 3;
+  }
+
+  /* Crash reason */
+  optional SSRestartCrashReason crash_reason = 2;
+  /* Number of crashes */
+  optional int32 crash_count = 3;
 }

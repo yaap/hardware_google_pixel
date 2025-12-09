@@ -70,8 +70,7 @@ void WaterEventReporter::logEvent(const std::shared_ptr<IStats> &stats_client,
                                   PixelAtoms::WaterEventReported::EventPoint event_point,
                                   const std::string_view sysfs_root)
 {
-   const std::string sysfs_path(sysfs_root);
-   static int count = 0;
+    const std::string sysfs_path(sysfs_root);
 
     if (!fileExists(sysfs_path)) {
         ALOGE("WaterEvent path is not valid %s", sysfs_path.c_str());

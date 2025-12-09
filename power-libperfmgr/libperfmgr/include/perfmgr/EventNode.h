@@ -18,6 +18,7 @@
 #define ANDROID_LIBPERFMGR_EVENTNODE_H_
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <vector>
 

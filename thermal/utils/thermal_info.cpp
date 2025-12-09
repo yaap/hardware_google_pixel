@@ -21,6 +21,7 @@
 #include <android-base/strings.h>
 #include <json/reader.h>
 
+#include <algorithm>
 #include <cmath>
 #include <unordered_set>
 

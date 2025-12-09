@@ -406,17 +406,26 @@ void BatteryDefender::stateMachine_firstAction(const state_E state) {
 
 void BatteryDefender::updateDefenderProperties(
         aidl::android::hardware::health::HealthInfo *health_info) {
+    bool defenderActive = false;
     /**
      * Override the OVERHEAT flag for UI updates to settings.
      * Also, force AC/USB online if active and still connected to power.
      */
     if (mCurrentState == STATE_ACTIVE) {
-        health_info->batteryHealth = BatteryHealth::OVERHEAT;
+        defenderActive = true;
+        if (health_info->batteryHealth != BatteryHealth::DEAD &&
+            health_info->batteryHealth != BatteryHealth::FAIR) {
+            health_info->batteryHealth = BatteryHealth::OVERHEAT;
+        }
     }
 
     /* Do the same as above when dock-defend triggers */
     if (mIsDockDefendTrigger) {
-        health_info->batteryHealth = BatteryHealth::OVERHEAT;
+        defenderActive = true;
+        if (health_info->batteryHealth != BatteryHealth::DEAD &&
+            health_info->batteryHealth != BatteryHealth::FAIR) {
+            health_info->batteryHealth = BatteryHealth::OVERHEAT;
+        }
     }
 
     /**
@@ -427,7 +436,7 @@ void BatteryDefender::updateDefenderProperties(
      */
     if (health_info->chargerUsbOnline == false && health_info->chargerAcOnline == false) {
         /* Override if the USB is connected and a battery defender is active */
-        if (mIsWiredPresent && health_info->batteryHealth == BatteryHealth::OVERHEAT) {
+        if (mIsWiredPresent && defenderActive) {
             if (mWasAcOnline) {
                 health_info->chargerAcOnline = true;
             }
@@ -443,7 +452,7 @@ void BatteryDefender::updateDefenderProperties(
 
     /* Do the same as above for wireless adapters */
     if (health_info->chargerWirelessOnline == false) {
-        if (mIsWirelessPresent && health_info->batteryHealth == BatteryHealth::OVERHEAT) {
+        if (mIsWirelessPresent && defenderActive) {
             health_info->chargerWirelessOnline = true;
         }
     }
@@ -451,7 +460,7 @@ void BatteryDefender::updateDefenderProperties(
     /* Do the same as above for dock adapters */
     if (health_info->chargerDockOnline == false) {
         /* Override if the USB is connected and a battery defender is active */
-        if (mIsDockPresent && health_info->batteryHealth == BatteryHealth::OVERHEAT) {
+        if (mIsDockPresent && defenderActive) {
             health_info->chargerDockOnline = true;
         }
     }

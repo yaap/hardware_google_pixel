@@ -75,7 +75,7 @@ void reportSpeakerHealthStat(const std::shared_ptr<IStats> &stats_client,
 void reportUsbDataSessionEvent(const std::shared_ptr<IStats> &stats_client,
                                const PixelAtoms::VendorUsbDataSessionEvent &usb_session);
 
-void readLogbuffer(const std::string &buf_path, int num_fields, uint16_t code,
+void readLogbuffer(const std::string &buf_path, std::vector<int32_t> fields, uint16_t code,
                    enum ReportEventFormat format, unsigned int last_check_time,
                    std::vector<std::vector<uint32_t>> &events);
 

@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "perfmgr/FlagProvider.h"
 #include "perfmgr/JobQueueManager.h"
 #include "perfmgr/Node.h"
 
@@ -35,15 +36,25 @@ namespace perfmgr {
 // timeout for this action:
 struct NodeAction {
     NodeAction(std::size_t node_index, std::size_t value_index,
-               std::chrono::milliseconds timeout_ms, const std::string &enable_property = "")
+               std::chrono::milliseconds timeout_ms, const std::string &enable_property = "",
+               const std::string &enable_flag_str = "", const std::string &disable_flag_str = "")
         : node_index(node_index),
           value_index(value_index),
           timeout_ms(timeout_ms),
-          enable_property(enable_property) {}
+          enable_property(enable_property) {
+        if (!enable_flag_str.empty()) {
+            enable_flag = FlagProvider::GetInstance().GetterFromString(enable_flag_str);
+        }
+        if (!disable_flag_str.empty()) {
+            disable_flag = FlagProvider::GetInstance().GetterFromString(disable_flag_str);
+        }
+    }
     std::size_t node_index;
     std::size_t value_index;
     std::chrono::milliseconds timeout_ms;  // 0ms for forever
     std::string enable_property;           // boolean property to control action on/off.
+    bool (*enable_flag)() = nullptr;
+    bool (*disable_flag)() = nullptr;
 };
 
 // The NodeLooperThread is responsible for managing each of the sysfs nodes

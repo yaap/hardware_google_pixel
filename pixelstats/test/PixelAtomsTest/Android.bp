@@ -14,24 +14,27 @@
 
 package {
     default_applicable_licenses: ["Android-Apache-2.0"],
+    default_team: "trendy_team_android_telemetry_client_infra",
 }
 
 java_test_host {
     name: "PixelAtomsTest",
     srcs: ["**/PixelAtomsTest.java"],
-    libs: [
+    static_libs: [
+        "base-pixel-atoms-test-lib",
         "compatibility-tradefed",
+        "host-libprotobuf-java-full",
+        "pixelatoms-java_host",
         "tradefed",
         "truth",
-        "host-libprotobuf-java-full",
-    ],
-    static_libs: [
-        "pixelatoms-java_host",
-        "base-pixel-atoms-test-lib",
     ],
     test_suites: [
-        "general-tests",
+        "device-tests",
     ],
+    // Due to the namespace, we cannot run it as a unit test.
+    test_options: {
+        unit_test: false,
+    },
 }
 
 java_library_host {

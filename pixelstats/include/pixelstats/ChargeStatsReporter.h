@@ -63,6 +63,8 @@ class ChargeStatsReporter {
             12;  // "%d,%d,%d, %d,%d,%d,%d %d %d,%d, %d,%d" AACR + CSI + AACP
     const int kNumChgStatsFormat04Fields =
             14;  // "%d,%d,%d, %d,%d,%d,%d %d %d,%d, %d,%d,%d,%d" AACR + CSI + AACP + AAFV
+    const int kNumChgStatsFormat05Fields =
+            15;  // "%d,%d,%d, %d,%d,%d,%d %d %d,%d, %d,%d,%d,%d,%d" AACR + CSI + AACP + AAFV + AACC
 
     const std::string kThermalChargeMetricsPath =
             "/sys/devices/platform/google,charger/thermal_stats";

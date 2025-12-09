@@ -83,6 +83,7 @@ void BatteryFwUpdateReporter::checkAndReportFwUpdate(const std::shared_ptr<IStat
                                                      const ReportEventType &event_type) {
     struct BatteryFwUpdatePipeline params;
     struct timespec boot_time;
+    std::vector<int32_t> fields = {kNumFwUpdatePipelineFields};
 
     if (paths.empty())
         return;
@@ -100,7 +101,7 @@ void BatteryFwUpdateReporter::checkAndReportFwUpdate(const std::shared_ptr<IStat
         std::vector<std::vector<uint32_t>> events;
 
         clock_gettime(CLOCK_MONOTONIC, &boot_time);
-        readLogbuffer(paths[i], kNumFwUpdatePipelineFields, event_type, FormatOnlyVal,
+        readLogbuffer(paths[i], fields, event_type, FormatOnlyVal,
                       last_check_[i], events);
         for (int event_idx = 0; event_idx < events.size(); event_idx++) {
             std::vector<uint32_t> &event = events[event_idx];

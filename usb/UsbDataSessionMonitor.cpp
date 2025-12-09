@@ -22,6 +22,7 @@
 #include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
+#include <android-base/stringprintf.h>
 #include <android_hardware_usb_flags.h>
 #include <cutils/uevent.h>
 #include <pixelstats/StatsHelper.h>
@@ -29,6 +30,7 @@
 #include <sys/timerfd.h>
 #include <utils/Log.h>
 
+#include <chrono>
 #include <regex>
 
 #include "include/pixelusb/CommonUtils.h"
@@ -37,6 +39,7 @@ namespace usb_flags = android::hardware::usb::flags;
 
 using aidl::android::frameworks::stats::IStats;
 using android::base::ReadFileToString;
+using android::base::StringAppendF;
 using android::base::Trim;
 using android::hardware::google::pixel::getStatsService;
 using android::hardware::google::pixel::reportUsbDataSessionEvent;
@@ -105,7 +108,6 @@ UsbDataSessionMonitor::UsbDataSessionMonitor(
         const std::string &host1UeventRegex, const std::string &host1StatePath,
         const std::string &host2UeventRegex, const std::string &host2StatePath,
         const std::string &dataRolePath, std::function<void()> updatePortStatusCb) {
-    struct epoll_event ev;
     std::string udc;
     int pipefds[2];
 
@@ -329,7 +331,7 @@ void UsbDataSessionMonitor::handleDeviceStateEvent(struct usbDeviceState *device
     read(deviceState->fd.get(), &state, USB_STATE_MAX_LEN);
 
     if (kValidStates.find(state) == kValidStates.end()) {
-        ALOGE("Invalid state %s: %s", deviceState->name.c_str(), state);
+        ALOGD("Invalid state %s: %s", deviceState->name.c_str(), state);
         return;
     }
 
@@ -544,6 +546,46 @@ void *UsbDataSessionMonitor::monitorThread(void *param) {
     }
     return NULL;
 }
+
+void UsbDataSessionMonitor::printState(const struct usbDeviceState *state,
+                                       boot_clock::time_point startTime, std::string *result) {
+
+    StringAppendF(result, "      name: %s\n", state->name.c_str());
+    StringAppendF(result, "      filepath: %s\n", state->filePath.c_str());
+    *result += "      states:\n";
+    *result += "      state name: elapsed time since data role change\n";
+    for (int i = 0; i < state->states.size(); i++) {
+        StringAppendF(result, "        %s: %s\n", Trim(state->states[i]).c_str(),
+                      std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(state->timestamps[i] - startTime).count()).c_str());
+    }
+}
+
+void UsbDataSessionMonitor::dump(int fd) {
+    std::string result = "UsbDataSessionMonitor Dump:\n";
+
+    result += "  mDataRole: ";
+    if (mDataRole == PortDataRole::HOST) {
+        result += "host";
+    } else {
+        if (mDataRole == PortDataRole::DEVICE) {
+            result += "device";
+        } else {
+            result += "none";
+        }
+    }
+    result += "\n";
+
+    printState(&mHost1State, mDataSessionStart, &result);
+    printState(&mHost2State, mDataSessionStart, &result);
+
+    StringAppendF(&result, "    mUdcBind: %s\n", std::to_string(mUdcBind).c_str());
+    printState(&mDeviceState, mDataSessionStart, &result);
+
+    if (!base::WriteStringToFd(result, fd)) {
+        ALOGE("Failed to write to dump file descriptor");
+    }
+}
+
 
 }  // namespace usb
 }  // namespace pixel

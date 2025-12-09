@@ -177,9 +177,9 @@ void SysfsCollector::logBatteryEEPROM(const std::shared_ptr<IStats> &stats_clien
 
     battery_EEPROM_reporter_.checkAndReportGMSR(stats_client, GMSRPath);
     battery_EEPROM_reporter_.checkAndReportMaxfgHistory(stats_client, maxfgHistoryPath);
-    battery_EEPROM_reporter_.checkAndReportFGModelLoading(stats_client, FGModelLoadingPath);
-    battery_EEPROM_reporter_.checkAndReportFGLearning(stats_client, FGLogBufferPath);
-    battery_EEPROM_reporter_.checkAndReportHistValid(stats_client, FGLogBufferPath);
+    battery_fg_reporter_.checkAndReportFGModelLoading(stats_client, FGModelLoadingPath);
+    battery_fg_reporter_.checkAndReportFGLearning(stats_client, FGLogBufferPath);
+    battery_fg_reporter_.checkAndReportHistValid(stats_client, FGLogBufferPath);
 }
 
 /**
@@ -590,7 +590,12 @@ void SysfsCollector::logUFSLifetime(const std::shared_ptr<IStats> &stats_client)
 void SysfsCollector::logUFSErrorsCount(const std::shared_ptr<IStats> &stats_client) {
     std::string bootDevice = android::base::GetProperty("ro.boot.bootdevice", "");
     if (bootDevice.empty()) {
-        ALOGW("ro.boot.bootdevice property is empty.");
+        // Try ro.boot.boot_devices if ro.boot.bootdevice is not set
+        bootDevice = android::base::GetProperty("ro.boot.boot_devices", "");
+    }
+
+    if (bootDevice.empty()) {
+        ALOGW("Neither ro.boot.bootdevice nor ro.boot.boot_devices property is set.");
         return;
     }
 
@@ -672,8 +677,8 @@ void SysfsCollector::logUfsStorageType() {
     }
     int ufs_type = 0;
     bool zufs_provisioned = android::base::GetBoolProperty(
-        "ro.vendor.product.ufs_type_zufs", false);
-    ALOGD("Property ro.vendor.product.ufs_type_zufs: %s", zufs_provisioned ? "true" : "false");
+        "ro.boot.zufs_provisioned", false);
+    ALOGD("Property ro.boot.zufs_provisioned: %s", zufs_provisioned ? "true" : "false");
 
     if (zufs_provisioned)
         ufs_type = UfsStorageTypeReported::ZUFS;
@@ -1281,6 +1286,15 @@ void SysfsCollector::reportZramBdStat(const std::shared_ptr<IStats> &stats_clien
 void SysfsCollector::logZramStats(const std::shared_ptr<IStats> &stats_client) {
     reportZramMmStat(stats_client);
     reportZramBdStat(stats_client);
+}
+
+void SysfsCollector::logSSRestartStats(const std::shared_ptr<IStats> &stats_client) {
+    std::string ssrdump_dir = getCStringOrDefault(configData, "SSRestartPath");
+    if (ssrdump_dir.empty()) {
+        ALOGV("SSRestart path not specified in JSON");
+        return;
+    }
+    ss_restart_reporter_.logSSRestartStats(stats_client, ssrdump_dir);
 }
 
 void SysfsCollector::logBootStats(const std::shared_ptr<IStats> &stats_client) {
@@ -2394,6 +2408,7 @@ void SysfsCollector::logPerHour() {
     mm_metrics_reporter_.logGcmaPerHour(stats_client);
     mm_metrics_reporter_.logMmProcessUsageByOomGroupSnapshot(stats_client);
     logZramStats(stats_client);
+    logSSRestartStats(stats_client);
     if (powerMitigationStatsPath.empty())
         mitigation_stats_reporter_.logMitigationStatsPerHour(stats_client,
                                                              powerMitigationStatsPath.c_str());
