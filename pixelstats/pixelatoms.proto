@@ -57,66 +57,66 @@ message Atom {
       PixelMmMetricsPerDay pixel_mm_metrics_per_day = 105016;
       F2fsCompressionInfo f2fs_compression_info = 105017;
       VendorChargeCycles vendor_charge_cycles = 105018; // moved from atoms.proto
-      VendorHardwareFailed vendor_hardware_failed = 105019 [(android.os.statsd.module) = "pixelaudio"]; // moved from atoms.proto
+      VendorHardwareFailed vendor_hardware_failed = 105019 [(android.os.statsd.module_name) = "pixelaudio"]; // moved from atoms.proto
       VendorSlowIo vendor_slow_io = 105020; // moved from atoms.proto
       VendorSpeechDspStat vendor_speech_dsp_stat = 105021; // moved from atoms.proto
       VendorPhysicalDropDetected vendor_physical_drop_detected =
-                105022 [(android.os.statsd.module) = "pixelstats"];     // moved from atoms.proto
+                105022 [(android.os.statsd.module_name) = "pixelstats"];     // moved from atoms.proto
       VendorUsbPortOverheat vendor_usb_port_overheat = 105023; // moved from atoms.proto
       CmaStatus cma_status = 105024;
       CmaStatusExt cma_status_ext = 105025;
       VendorBatteryHealthSnapshot vendor_battery_health_snapshot =
-                105026 [(android.os.statsd.module) = "pixelhealth"]; // moved from atoms.proto
+                105026 [(android.os.statsd.module_name) = "pixelhealth"]; // moved from atoms.proto
       VendorBatteryCausedShutdown vendor_battery_caused_shutdown =
-                105027 [(android.os.statsd.module) = "pixelhealth"]; // moved from atoms.proto
+                105027 [(android.os.statsd.module_name) = "pixelhealth"]; // moved from atoms.proto
       F2fsGcSegmentInfo f2fs_gc_segment_info = 105028;
       PowerMitigationStats mitigation_stats = 105029; // moved from atoms.proto
 
       CitadelVersion citadel_version = 100018; // moved from vendor proprietary
       CitadelEvent citadel_event = 100019;  // moved from vendor proprietary
-      VendorSpeakerStatsReported vendor_speaker_stats_reported = 105030 [(android.os.statsd.module) = "pixelaudio"];
+      VendorSpeakerStatsReported vendor_speaker_stats_reported = 105030 [(android.os.statsd.module_name) = "pixelaudio"];
 
       ChreHalNanoappLoadFailed chre_hal_nanoapp_load_failed =
-                105031 [(android.os.statsd.module) = "chre"];
-      ChrePalOpenFailed chre_pal_open_failed = 105032 [(android.os.statsd.module) = "chre"];
+                105031 [(android.os.statsd.module_name) = "chre"];
+      ChrePalOpenFailed chre_pal_open_failed = 105032 [(android.os.statsd.module_name) = "chre"];
       ChreApiErrorCodeDistributionTaken chre_api_error_code_distribution_taken =
-                105033 [(android.os.statsd.module) = "chre"];
+                105033 [(android.os.statsd.module_name) = "chre"];
       ChreDynamicMemorySnapshotReported chre_dynamic_memory_snapshot_reported =
-                105034 [(android.os.statsd.module) = "chre"];
+                105034 [(android.os.statsd.module_name) = "chre"];
       ChreEventQueueSnapshotReported chre_event_queue_snapshot_reported =
-                105035 [(android.os.statsd.module) = "chre"];
-      ChreApWakeUpOccurred chre_ap_wake_up_occurred = 105036 [(android.os.statsd.module) = "chre"];
+                105035 [(android.os.statsd.module_name) = "chre"];
+      ChreApWakeUpOccurred chre_ap_wake_up_occurred = 105036 [(android.os.statsd.module_name) = "chre"];
 
       BatteryHealthStatus battery_health_status = 105037;
       BatteryHealthUsage battery_health_usage = 105038;
       F2fsSmartIdleMaintEnabledStateChanged f2fs_smart_idle_maint_enabled_state_changed = 105039;
       BlockStatsReported block_stats_reported = 105040;
-      VendorAudioHardwareStatsReported vendor_audio_hardware_stats_reported = 105041 [(android.os.statsd.module) = "pixelaudio"];
+      VendorAudioHardwareStatsReported vendor_audio_hardware_stats_reported = 105041 [(android.os.statsd.module_name) = "pixelaudio"];
 
       ThermalDfsStats thermal_dfs_stats = 105042;
       VendorLongIRQStatsReported vendor_long_irq_stats_reported = 105043;
       VendorResumeLatencyStats vendor_resume_latency_stats = 105044;
       VendorTempResidencyStats vendor_temp_residency_stats = 105045;
-      BrownoutDetected brownout_detected = 105046 [(android.os.statsd.module) = "pixelbcl"];
+      BrownoutDetected brownout_detected = 105046 [(android.os.statsd.module_name) = "pixelbcl"];
       PcieLinkStatsReported pcie_link_stats = 105047;
       VendorSensorCoolingDeviceStats vendor_sensor_cooling_device_stats = 105048;
 
-      VibratorPlaycountReported vibrator_playcount_reported = 105049 [(android.os.statsd.module) = "vibrator"];
-      VibratorLatencyReported vibrator_latency_reported = 105050 [(android.os.statsd.module) = "vibrator"];
-      VibratorErrorsReported vibrator_errors_reported = 105051 [(android.os.statsd.module) = "vibrator"];
+      VibratorPlaycountReported vibrator_playcount_reported = 105049 [(android.os.statsd.module_name) = "vibrator"];
+      VibratorLatencyReported vibrator_latency_reported = 105050 [(android.os.statsd.module_name) = "vibrator"];
+      VibratorErrorsReported vibrator_errors_reported = 105051 [(android.os.statsd.module_name) = "vibrator"];
       F2fsAtomicWriteInfo f2fs_atomic_write_info = 105052;
       PartitionsUsedSpaceReported partition_used_space_reported = 105053;
       PowerMitigationDurationCounts mitigation_duration = 105054; // moved from atoms.proto
       DisplayPanelErrorStats display_panel_error_stats = 105055;
       VendorAudioPdmStatsReported vendor_audio_pdm_stats_reported = 105056;
-      VendorAudioThirdPartyEffectStatsReported vendor_audio_third_party_effect_stats_reported = 105057 [(android.os.statsd.module) = "pixelaudio"];
+      VendorAudioThirdPartyEffectStatsReported vendor_audio_third_party_effect_stats_reported = 105057 [(android.os.statsd.module_name) = "pixelaudio"];
       VendorAudioAdaptedInfoStatsReported vendor_audio_adapted_info_stats_reported = 105058;
       GpuEvent gpu_event = 105059;
-      VendorAudioPcmStatsReported vendor_audio_pcm_stats_reported = 105060 [(android.os.statsd.module) = "pixelaudio"];
+      VendorAudioPcmStatsReported vendor_audio_pcm_stats_reported = 105060 [(android.os.statsd.module_name) = "pixelaudio"];
       VendorUsbDataSessionEvent vendor_usb_data_session_event = 105061;
       ThermalSensorAbnormalityDetected thermal_sensor_abnormality_detected = 105062;
       VendorAudioOffloadedEffectStatsReported vendor_audio_offloaded_effect_stats_reported = 105063;
-      VendorAudioBtMediaStatsReported vendor_audio_bt_media_stats_reported = 105064 [(android.os.statsd.module) = "pixelaudio"];
+      VendorAudioBtMediaStatsReported vendor_audio_bt_media_stats_reported = 105064 [(android.os.statsd.module_name) = "pixelaudio"];
       PixelImpulseUsageReported pixel_impulse_usage_reported = 105065;
       DisplayPortErrorStats display_port_error_stats = 105066;
       HDCPAuthTypeStats hdcp_auth_type_stats = 105067;
@@ -125,10 +125,10 @@ message Atom {
       MmProcessUsageByOomGroupSnapshot mm_process_usage_by_oom_group_snapshot = 105070;
       MmGcmaSnapshot mm_gcma_snapshot = 105071;
       MmGcmaStats mm_gcma_stats = 105072;
-      VendorAudioUsbDeviceCapabilityStats vendor_audio_usb_device_capability_stats = 105073 [(android.os.statsd.module) = "pixelaudio"];
+      VendorAudioUsbDeviceCapabilityStats vendor_audio_usb_device_capability_stats = 105073 [(android.os.statsd.module_name) = "pixelaudio"];
       BatteryTimeToFullStatsReported battery_time_to_full_stats_reported = 105074;
-      VendorAudioDirectUsbAccessUsageStats vendor_audio_direct_usb_access_usage_stats = 105075 [(android.os.statsd.module) = "pixelaudio"];
-      VendorAudioUsbConfigStats vendor_audio_usb_config_stats = 105076 [(android.os.statsd.module) = "pixelaudio"];
+      VendorAudioDirectUsbAccessUsageStats vendor_audio_direct_usb_access_usage_stats = 105075 [(android.os.statsd.module_name) = "pixelaudio"];
+      VendorAudioUsbConfigStats vendor_audio_usb_config_stats = 105076 [(android.os.statsd.module_name) = "pixelaudio"];
       GpuFrozenAppsMemoryPerUid gpu_frozen_apps_memory_per_uid = 105078;
       RepairModeEntered repair_mode_entered = 105079;
       RepairModeExited repair_mode_exited = 105080;
@@ -136,16 +136,16 @@ message Atom {
       RepairModeErrorReported repair_mode_error_reported = 105082;
       DisplayPortDSCSupportCountStatsReported display_port_dsc_support_stats = 105083;
       DisplayPortMaxResolutionCountStatsReported display_port_max_resolution_stats = 105084;
-      VendorAudioDspRecordUsageStatsReported vendor_audio_dsp_record_usage_stats_reported = 105085 [(android.os.statsd.module) = "pixelaudio"];
-      VendorAudioUsbConnectionState vendor_audio_usb_connection_state = 105086 [(android.os.statsd.module) = "pixelaudio"];
-      VendorAudioSpeakerPowerStatsReported vendor_audio_speaker_power_stats_reported = 105087 [(android.os.statsd.module) = "pixelaudio"];
+      VendorAudioDspRecordUsageStatsReported vendor_audio_dsp_record_usage_stats_reported = 105085 [(android.os.statsd.module_name) = "pixelaudio"];
+      VendorAudioUsbConnectionState vendor_audio_usb_connection_state = 105086 [(android.os.statsd.module_name) = "pixelaudio"];
+      VendorAudioSpeakerPowerStatsReported vendor_audio_speaker_power_stats_reported = 105087 [(android.os.statsd.module_name) = "pixelaudio"];
       DmVerityPartitionReadAmountReported dm_verity_partition_read_amount_reported = 105088;
       WaterEventReported water_event_reported = 105089;
-      MediaPlaybackUsageStatsReported media_playback_usage_stats_reported = 105090 [(android.os.statsd.module) = "pixelaudio"];
-      CallUsageStatsReported call_usage_stats_reported = 105091 [(android.os.statsd.module) = "pixelaudio"];
+      MediaPlaybackUsageStatsReported media_playback_usage_stats_reported = 105090 [(android.os.statsd.module_name) = "pixelaudio"];
+      CallUsageStatsReported call_usage_stats_reported = 105091 [(android.os.statsd.module_name) = "pixelaudio"];
       BatteryFirmwareUpdateReported battery_firmware_update_reported = 105092;
-      PowerFifoDump power_fifo_dump = 105093 [(android.os.statsd.module) = "pixelpower"];
-      GnssTtffReported gnss_ttff_reported = 105094 [(android.os.statsd.module) = "pixelgnss"];
+      PowerFifoDump power_fifo_dump = 105093 [(android.os.statsd.module_name) = "pixelpower"];
+      GnssTtffReported gnss_ttff_reported = 105094 [(android.os.statsd.module_name) = "pixelgnss"];
       StorageUfsErrorCountReported storage_ufs_error_count_reported = 105095;
       UfsStorageTypeReported ufs_storage_type_reported = 105096;
       ThermalTjTripCountReported thermal_tj_trip_count_reported = 105097;
