@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+soong_namespace {
+    imports: [
+        "hardware/google/pixel/pixelstats",
+    ],
+}
+
 package {
     default_applicable_licenses: ["Android-Apache-2.0"],
 }
