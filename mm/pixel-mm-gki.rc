@@ -34,6 +34,11 @@ on property:sys.boot_completed=1
     chown system system /sys/kernel/vendor_mm/gcma_heap/trusty:faceauth_rawimage_heap/max_usage_kb
     chmod 0660 /sys/kernel/vendor_mm/gcma_heap/trusty:faceauth_rawimage_heap/max_usage_kb
 
+on property:sys.boot_completed=1
+    # Set deferred_free_list thread priority to match kswapd
+    # kswapd has default prio, so set nice to 0
+    write /sys/kernel/vendor_mm/deferred_free_thread_nice 0
+
 on property:ro.debuggable=1 && property:sys.boot_completed=1
     # Only enable pixel mm trace point in debug builds.
     # If others want to put more events, it should get hard review from pixel-perf-team.
