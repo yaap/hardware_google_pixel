@@ -40,6 +40,7 @@ memory
  cma/cma_alloc_info
  cma/cma_alloc_finish
  kmem/mm_alloc_contig_migrate_range_info
+ s5400/s5400_log_watermark
 ion
  kmem/ion_alloc_buffer_start
 sched
@@ -86,6 +87,38 @@ usb
  dwc3/dwc3_gadget_generic_cmd
  dwc3/dwc3_gadget_giveback
  dwc3/dwc3_prepare_trb
+ dwc3/dwc3_set_prtcap
+ gadget/usb_ep_alloc_request
+ gadget/usb_ep_clear_halt
+ gadget/usb_ep_dequeue
+ gadget/usb_ep_disable
+ gadget/usb_ep_enable
+ gadget/usb_ep_fifo_flush
+ gadget/usb_ep_fifo_status
+ gadget/usb_ep_free_request
+ gadget/usb_ep_queue
+ gadget/usb_ep_set_halt
+ gadget/usb_ep_set_maxpacket_limit
+ gadget/usb_ep_set_wedge
+ gadget/usb_gadget_activate
+ gadget/usb_gadget_clear_selfpowered
+ gadget/usb_gadget_connect
+ gadget/usb_gadget_deactivate
+ gadget/usb_gadget_disconnect
+ gadget/usb_gadget_frame_number
+ gadget/usb_gadget_giveback_request
+ gadget/usb_gadget_set_remote_wakeup
+ gadget/usb_gadget_set_selfpowered
+ gadget/usb_gadget_set_state
+ gadget/usb_gadget_vbus_connect
+ gadget/usb_gadget_vbus_disconnect
+ gadget/usb_gadget_vbus_draw
+ gadget/usb_gadget_wakeup
+ usbcore/usb_alloc_dev
+ usbcore/usb_set_device_state
 usb_verbose
  dwc3/dwc3_readl
  dwc3/dwc3_writel
+fwtp
+ fwtp_ftrace/fwtp_perfetto_counter
+ fwtp_ftrace/fwtp_perfetto_slice
