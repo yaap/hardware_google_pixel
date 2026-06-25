@@ -15,8 +15,11 @@
  */
 
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/ioctl.h>
+#include <linux/fs.h>
 
 #include <string>
 #include <string_view>
@@ -25,7 +28,9 @@
 #include <android-base/endian.h>
 #include <android-base/logging.h>
 #include <android-base/strings.h>
+#include <android-base/unique_fd.h>
 #include <app_nugget.h>
+#include <ext4_utils/wipe.h>
 #include <misc_writer/misc_writer.h>
 #include <nos/NuggetClient.h>
 #include <nos/debug.h>
@@ -63,6 +68,34 @@ bool WipeTitanM() {
 
     LOG(INFO) << "Titan M wipe successful";
     return true;
+}
+
+/** Wipe trusty_userdata partition. */
+bool WipeTrustyUserdata() {
+    const std::string trusty_partition = "/dev/block/by-name/trusty_userdata";
+    android::base::unique_fd fd(open(trusty_partition.c_str(), O_WRONLY));
+    if (fd == -1) {
+        if (errno == ENOENT) {
+            LOG(INFO) << trusty_partition << " does not exist, skip wiping trusty_userdata";
+            return true;
+        }
+        PLOG(ERROR) << "Failed to open " << trusty_partition;
+        return false;
+    }
+
+    uint64_t size = 0;
+    if (ioctl(fd, BLKGETSIZE64, &size) == -1) {
+        PLOG(ERROR) << "Failed to get size of " << trusty_partition;
+        return false;
+    }
+
+    if (wipe_block_device(fd, size) == 0) {
+        LOG(INFO) << "Wiped Trusty user data successfully";
+        return true;
+    }
+
+    PLOG(ERROR) << "Failed to wipe " << trusty_partition;
+    return false;
 }
 
 /** Call device-specifc WipeKeys function, if any. */
@@ -133,6 +166,10 @@ class PixelDevice : public ::Device {
                 totalSuccess = true;
                 break;
             }
+        }
+
+        if (!WipeTrustyUserdata()) {
+            totalSuccess = false;
         }
 
         if (!WipeKeysHook(ui)) {

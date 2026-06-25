@@ -15,6 +15,7 @@ cc_library_static {
     ],
 
     whole_static_libs: [
+        "libext4_utils",
         "libmisc_writer",
         "libbootloader_message",
         "libnos_for_recovery",
