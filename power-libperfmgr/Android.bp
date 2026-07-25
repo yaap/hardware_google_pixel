@@ -16,7 +16,6 @@
 soong_namespace {
     imports: [
         "hardware/google/interfaces",
-        "hardware/google/pixel/pixelstats",
     ],
 }
 
@@ -154,7 +153,6 @@ cc_binary {
         "libperfmgr",
         "libprocessgroup",
         "pixel-power-ext-V1-ndk",
-        "android.frameworks.stats-V2-ndk",
         "android.hardware.common.fmq-V1-ndk",
         "libfmq",
     ],
@@ -162,14 +160,12 @@ cc_binary {
         "libaconfig_storage_read_api_cc",
         "libgmock",
         "libgtest",
-        "libpixelstats",
         "powerhal_flags-aconfig-cc",
     ],
     srcs: [
         "aidl/BackgroundWorker.cpp",
         "aidl/ChannelGroup.cpp",
         "aidl/ChannelManager.cpp",
-        "aidl/MetricUploader.cpp",
         "aidl/GpuCalculationHelpers.cpp",
         "aidl/GpuCapacityNode.cpp",
         "aidl/service.cpp",
